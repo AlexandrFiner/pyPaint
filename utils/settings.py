@@ -3,6 +3,12 @@ import pygame
 pygame.init()
 pygame.font.init()
 
+# Действия
+ACTION_NO = 0
+ACTION_DRAW = 1
+ACTION_MOVE_POINT = 2
+ACTION_MOVE_LINE = 3
+
 # Размер окна
 WIDTH, HEIGHT = 600, 700
 
