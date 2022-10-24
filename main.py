@@ -18,7 +18,7 @@ def draw(win, cursorPoint):
     elif currentAction == ACTION_NO:
         if cursorOnLineEnd(cursor, radius=5) is not None:
             pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_SIZEWE)
-        elif cursorOnLine(cursorPoint, zoneRadius=20) is not None:
+        elif cursorOnLine(cursorPoint, zoneRadius=5) is not None:
             pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_SIZEALL)
         else:
             pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
@@ -34,6 +34,9 @@ def draw_lines():
 
             if currentAction == ACTION_MOVE_LINE and i == pointId:
                 continue
+
+        if currentAction == ACTION_MOVE_GROUP and i in linesInGroup:
+            continue
 
         x1 = points[i][0][0]
         x2 = points[i][1][0]
@@ -53,7 +56,10 @@ def draw_lines():
             ((y1 + y2) / 2),
         )
         WIN.blit(text_surface, centerLine)
-        pygame.draw.line(WIN, BLACK, (x1, y1), (x2, y2))
+        if i in linesInGroup:
+            pygame.draw.line(WIN, BLUE, (x1, y1), (x2, y2))
+        else:
+            pygame.draw.line(WIN, BLACK, (x1, y1), (x2, y2))
 
 
 def cursorOnLine(cursorPoint, zoneRadius=3):
@@ -91,10 +97,9 @@ def cursorOnLine(cursorPoint, zoneRadius=3):
         # (x - x1)/(x2 - x1) = (y - y1)/(y2 - y1)
         xCord = ((y - y1)*(x2 - x1))/(y2 - y1) + x1
         distToLine = abs(x - xCord)
-        if distToLine > 20:
+        if distToLine > zoneRadius:
             continue
 
-        print(distToLine)
         return i
 
     return None
@@ -114,6 +119,7 @@ def cursorOnLineEnd(cursorPoint, radius=5):
 run = True
 clock = pygame.time.Clock()
 points = []
+linesInGroup = []
 currentAction = ACTION_NO
 posStart = None
 pointId = None
@@ -134,9 +140,15 @@ while run:
     # Нажата ЛЕВАЯ кнопка мыши
 
     if currentAction == ACTION_NO:
-        lineId = cursorOnLine(cursor, zoneRadius=3)
+        lineId = cursorOnLine(cursor, zoneRadius=5)
         # if lineId is not None:
         hoverLineId = lineId
+
+    if pygame.mouse.get_pressed()[0] and pygame.key.get_pressed()[pygame.K_LCTRL]:
+        if currentAction == ACTION_NO or ACTION_MAKE_GROUP:
+            if hoverLineId is not None and hoverLineId not in linesInGroup:
+                currentAction = ACTION_MAKE_GROUP
+                linesInGroup.append(hoverLineId)
 
     if pygame.mouse.get_pressed()[0]:
         # ЛКМ ЗАЖАТА
@@ -145,14 +157,30 @@ while run:
             if pointId is not None:
                 currentAction = ACTION_MOVE_POINT
             else:
+                posStart = cursor
                 if hoverLineId is not None:
-                    posStart = cursor
-                    pointId = hoverLineId
-                    currentAction = ACTION_MOVE_LINE
+                    if not linesInGroup:
+                        pointId = hoverLineId
+                        currentAction = ACTION_MOVE_LINE
+                    else:
+                        currentAction = ACTION_MOVE_GROUP
                 else:
-                    posStart = cursor
+                    linesInGroup = []
                     currentAction = ACTION_DRAW
 
+                print(currentAction, linesInGroup)
+
+
+    # Нажата средняя кнопка мыши
+    if pygame.mouse.get_pressed()[2]:
+        # ПКМ
+        if currentAction == ACTION_NO:
+            # Удаление
+            if hoverLineId is not None:
+                points.pop(hoverLineId)
+                if hoverLineId in linesInGroup:
+                    linesInGroup.remove(hoverLineId)
+                # print('Удаление')
 
     if not pygame.mouse.get_pressed()[0]:
         if currentAction == ACTION_DRAW:
@@ -169,19 +197,31 @@ while run:
                 moved = (cursor[0]-posStart[0], cursor[1]-posStart[1])
                 points[hoverLineId] = positionMovePoint
 
-        currentAction = ACTION_NO
+        if currentAction == ACTION_MOVE_GROUP:
+            if linesInGroup:
+                moved = (cursor[0] - posStart[0], cursor[1] - posStart[1])
+                for lineGroupId in linesInGroup:
+                    print('move group', points[lineGroupId])
+                    positionMovePoint = (
+                        (points[lineGroupId][0][0] + moved[0], points[lineGroupId][0][1] + moved[1]),
+                        (points[lineGroupId][1][0] + moved[0], points[lineGroupId][1][1] + moved[1]),
+                    )
+                    points[lineGroupId] = positionMovePoint
+                    print('move group', points[lineGroupId])
 
-    # Нажата средняя кнопка мыши
-    if pygame.mouse.get_pressed()[1]:
-        # Средняя кнопка мыши
-        if currentAction == ACTION_NO:
-            # Удаление
-            if hoverLineId is not None:
-                points.pop(hoverLineId)
-                # print('Удаление')
+        currentAction = ACTION_NO
 
     if currentAction == ACTION_DRAW and posStart is not None:
         pygame.draw.line(WIN, RED, (posStart[0], posStart[1]), (cursor[0], cursor[1]))
+
+    if currentAction == ACTION_MOVE_GROUP and posStart is not None and linesInGroup is not []:
+        moved = (cursor[0]-posStart[0], cursor[1]-posStart[1])
+        for lineGroupId in linesInGroup:
+            positionMovePoint = (
+                (points[lineGroupId][0][0] + moved[0], points[lineGroupId][0][1] + moved[1]),
+                (points[lineGroupId][1][0] + moved[0], points[lineGroupId][1][1] + moved[1]),
+            )
+            pygame.draw.line(WIN, RED, positionMovePoint[0], positionMovePoint[1])
 
     if currentAction == ACTION_MOVE_LINE and hoverLineId is not None and posStart is not None:
         moved = (cursor[0]-posStart[0], cursor[1]-posStart[1])
