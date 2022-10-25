@@ -15,6 +15,7 @@ class Paint(Frame):
         self.cursor_start = (0, 0)
         self.current_line = None
         self.points = dict()
+        self.lines = []
         self.buttons_color = []
         self.buttons_size = []
         self.buttons_mode = []
@@ -51,6 +52,7 @@ class Paint(Frame):
             self.current_line = event.widget.find_withtag('current')[0]
             self.canv.delete(self.current_line)
             self.points.pop(self.current_line)
+            self.lines.remove(self.current_line)
 
         if self.current_mode == MODE_INPUT_3D:
             self.current_line = event.widget.find_withtag('current')[0]
@@ -105,6 +107,7 @@ class Paint(Frame):
                 x, y = event.x, event.y
                 self.canv.coords(self.current_line, x1, y1, x, y)
                 self.update_item_points(self.current_line)
+                self.lines.append(self.current_line)
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
@@ -125,6 +128,7 @@ class Paint(Frame):
 
 
         print(self.points)
+        print(self.lines)
 
 
     def set_color(self, new_color, button):
@@ -154,6 +158,7 @@ class Paint(Frame):
     def clear_canv(self):
         self.canv.delete("all")
         self.points.clear()
+        self.lines = []
 
     def setUI(self):
         self.parent.title("PyGame")
