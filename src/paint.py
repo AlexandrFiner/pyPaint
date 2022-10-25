@@ -1,3 +1,4 @@
+import tkinter.simpledialog
 from tkinter import *
 from tkinter import colorchooser
 from utils import *
@@ -6,13 +7,14 @@ from utils import *
 class Paint(Frame):
     def __init__(self, parent):
         super().__init__()
+        self.cursor_text = None
         self.canv = None
         self.parent = parent
         self.brush_size = 2
         self.color = "red"
         self.cursor_start = (0, 0)
         self.current_line = None
-        self.lines = []
+        self.points = dict()
         self.buttons_color = []
         self.buttons_size = []
         self.buttons_mode = []
@@ -22,9 +24,21 @@ class Paint(Frame):
         self.current_mode = MODE_MAKE_LINES
         self.setUI()
 
-    def line_hover(self, event):
-        print(event)
+    def update_item_points(self, line):
+        z1, z2 = 0.0, 0.0
+        if line in self.points:
+            z1, z2 = self.points[line][4], self.points[line][5]
 
+        self.points[self.current_line] = [
+            self.canv.coords(line)[0],
+            self.canv.coords(line)[1],
+            self.canv.coords(line)[2],
+            self.canv.coords(line)[3],
+            z1,
+            z2
+        ]
+
+    def click_on_line(self, event):
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_NONE:
                 x, y = event.x, event.y
@@ -36,6 +50,14 @@ class Paint(Frame):
         if self.current_mode == MODE_DELETE_LINES:
             self.current_line = event.widget.find_withtag('current')[0]
             self.canv.delete(self.current_line)
+            self.points.pop(self.current_line)
+
+        if self.current_mode == MODE_INPUT_3D:
+            self.current_line = event.widget.find_withtag('current')[0]
+            z = tkinter.simpledialog.askfloat('Ввод', 'Введите Z координату')
+            print(z)
+            self.points[self.current_line][4] = z
+            self.points[self.current_line][5] = z
 
     def draw_line_start(self, event):
         if self.current_mode == MODE_MAKE_LINES:
@@ -44,12 +66,17 @@ class Paint(Frame):
                 x, y = event.x, event.y
                 self.cursor_start = (x, y)
                 self.current_line = self.canv.create_line(x, y, x, y, fill=self.color, width=self.brush_size)
-                self.canv.tag_bind(self.current_line, '<Button-1>', self.line_hover)
+                self.canv.tag_bind(self.current_line, '<Button-1>', self.click_on_line)
 
         if self.current_mode == MODE_MOVE_LINES:
             pass
 
+    def mouse_motion(self, event):
+        self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
+
     def draw_line_action(self, event):
+        self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
+
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_DRAW_LINE:
                 x1, y1 = self.cursor_start
@@ -77,6 +104,7 @@ class Paint(Frame):
                 x1, y1 = self.cursor_start
                 x, y = event.x, event.y
                 self.canv.coords(self.current_line, x1, y1, x, y)
+                self.update_item_points(self.current_line)
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
@@ -92,6 +120,11 @@ class Paint(Frame):
                                  self.line_coords[2] + move[0],
                                  self.line_coords[3] + move[1]
                                  )
+
+                self.update_item_points(self.current_line)
+
+
+        print(self.points)
 
 
     def set_color(self, new_color, button):
@@ -118,9 +151,9 @@ class Paint(Frame):
             btn['state'] = NORMAL
         button['state'] = DISABLED
 
-    def clear(self):
+    def clear_canv(self):
         self.canv.delete("all")
-        self.lines = []
+        self.points.clear()
 
     def setUI(self):
         self.parent.title("PyGame")
@@ -136,6 +169,7 @@ class Paint(Frame):
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
         self.canv.bind("<B1-Motion>", self.draw_line_action)
         self.canv.bind("<ButtonRelease-1>", self.draw_line_end)
+        self.canv.bind("<Motion>", self.mouse_motion)
 
         # создаем метку для кнопок изменения цвета кисти
         color_lab = Label(self, text="Цвет: ")
@@ -161,7 +195,7 @@ class Paint(Frame):
         my_color_btn = Button(self, text="Свой цвет", width=10, command=self.set_color_picker)
         my_color_btn.grid(row=0, column=5)
 
-        clear_btn = Button(self, text="Очистить", width=10, command=lambda: self.canv.delete("all"))
+        clear_btn = Button(self, text="Очистить", width=10, command=self.clear_canv)
         clear_btn.grid(row=0, column=6, sticky=W)
 
         size_lab = Label(self, text="Размер линии: ")
@@ -205,3 +239,10 @@ class Paint(Frame):
         mode_del = Button(self, text="Удаление", width=10, command=lambda: self.set_mode(MODE_DELETE_LINES, mode_del))
         mode_del.grid(row=2, column=3)
         self.buttons_mode.append(mode_del)
+
+        mode_del = Button(self, text="Ввод Z", width=10, command=lambda: self.set_mode(MODE_INPUT_3D, mode_del))
+        mode_del.grid(row=2, column=4)
+        self.buttons_mode.append(mode_del)
+
+        self.cursor_text = Label(self, text="loading..")
+        self.cursor_text.grid(row=4, column=0, sticky=W)
