@@ -57,7 +57,6 @@ class Paint(Frame):
         if self.current_mode == MODE_INPUT_3D:
             self.current_line = event.widget.find_withtag('current')[0]
             z = tkinter.simpledialog.askfloat('Ввод', 'Введите Z координату')
-            print(z)
             self.points[self.current_line][4] = z
             self.points[self.current_line][5] = z
 
@@ -106,8 +105,11 @@ class Paint(Frame):
                 x1, y1 = self.cursor_start
                 x, y = event.x, event.y
                 self.canv.coords(self.current_line, x1, y1, x, y)
-                self.update_item_points(self.current_line)
-                self.lines.append(self.current_line)
+                if abs(x-x1) < 2 and abs(y-y1) < 2:
+                    self.canv.delete(self.current_line)
+                else:
+                    self.update_item_points(self.current_line)
+                    self.lines.append(self.current_line)
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
@@ -245,9 +247,9 @@ class Paint(Frame):
         mode_del.grid(row=2, column=3)
         self.buttons_mode.append(mode_del)
 
-        mode_del = Button(self, text="Ввод Z", width=10, command=lambda: self.set_mode(MODE_INPUT_3D, mode_del))
-        mode_del.grid(row=2, column=4)
-        self.buttons_mode.append(mode_del)
+        mode_input_z = Button(self, text="Ввод Z", width=10, command=lambda: self.set_mode(MODE_INPUT_3D, mode_input_z))
+        mode_input_z.grid(row=2, column=4)
+        self.buttons_mode.append(mode_input_z)
 
         self.cursor_text = Label(self, text="loading..")
         self.cursor_text.grid(row=4, column=0, sticky=W)
