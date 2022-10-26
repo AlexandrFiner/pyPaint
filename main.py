@@ -1,16 +1,19 @@
-import math
-import numpy
-
-from utils import *
-
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("pyPaint")
+from tkinter import *
+from tkinter.messagebox import *
+from src.paint import *
 
 
-def draw(win, cursorPoint):
-    win.fill(BG_COLOR)
-    draw_lines()
+# выход из программы
+def close_win():
+    if askyesno("Выход", "Вы уверены?"):
+        root.destroy()
 
+
+# вывод справки
+def about():
+    showinfo("Контакты", "vk.com/alexfiner")
+
+<<<<<<< HEAD
     if currentAction == ACTION_DRAW:
         pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
     elif currentAction == ACTION_MOVE_POINT:
@@ -22,19 +25,29 @@ def draw(win, cursorPoint):
             pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_SIZEALL)
         else:
             pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+=======
+>>>>>>> 0332da34dcc20f3ff71cef1e856de8a734adf8ec
 
-    pygame.display.update()
+# функция для создания главного окна
+def main():
+    global root
+    root = Tk()
+    root.geometry("800x600+300+300")
+    app = Paint(root)
+    m = Menu(root)
+    root.config(menu=m)
+
+    fm = Menu(m)
+    m.add_cascade(label="Файл", menu=fm)
+    fm.add_command(label="Выход", command=close_win)
+
+    hm = Menu(m)
+    m.add_cascade(label="Справка", menu=hm)
+    hm.add_command(label="О программе", command=about)
+    root.mainloop()
 
 
-def draw_lines():
-    for i in range(len(points)):
-        if pointId is not None:
-            if currentAction == ACTION_MOVE_POINT and i == pointId[0]:
-                continue
-
-            if currentAction == ACTION_MOVE_LINE and i == pointId:
-                continue
-
+<<<<<<< HEAD
         if currentAction == ACTION_MOVE_GROUP and i in linesInGroup:
             continue
 
@@ -243,3 +256,7 @@ while run:
     pygame.display.flip()
 
 pygame.quit()
+=======
+if __name__ == "__main__":
+    main()
+>>>>>>> 0332da34dcc20f3ff71cef1e856de8a734adf8ec
