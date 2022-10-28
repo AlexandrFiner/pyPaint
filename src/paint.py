@@ -30,11 +30,13 @@ class Paint(Frame):
         self.line_coords = (0, 0, 0, 0)
         self.current_mode = MODE_MAKE_LINES
         self.selector_box = None
+        self.center_point = (0, 0)
 
         self._geometry_handler = None
         self.x_rotation_slider = None
         self.y_rotation_slider = None
         self.z_rotation_slider = None
+        self.zoom_slider = None
 
         self.setUI()
 
@@ -125,7 +127,25 @@ class Paint(Frame):
             z1, z2 = self.points[line][2], self.points[line][5]
 
         coords = self.canv.coords(line)
-        print(line, coords)
+
+
+        self._geometry_handler._zoom = self.zoom_slider.get()
+        self._geometry_handler._angle_x = self.x_rotation_slider.get()
+        self._geometry_handler._angle_y = self.y_rotation_slider.get()
+        self._geometry_handler._angle_z = self.z_rotation_slider.get()
+
+        rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix(
+            0 - self._geometry_handler._angle_x,
+            0 - self._geometry_handler._angle_y,
+            0 - self._geometry_handler._angle_z,
+        )
+
+        x1, y1 = self._geometry_handler.transform_point(([
+            [coords[0]],
+            [coords[1]],
+            [z1]
+        ]), rot_x, rot_y, rot_z)
+        print(x1, y1)
 
         self.points[line] = [
             coords[0],
@@ -135,7 +155,6 @@ class Paint(Frame):
             coords[3],
             z2
         ]
-        print(self.points)
 
     def click_on_line(self, event):
         if self.current_mode == MODE_MOVE_LINES:
@@ -180,13 +199,6 @@ class Paint(Frame):
                 x, y = event.x, event.y
                 self.cursor_start = (x, y)
                 self.current_action = EVENT_SELECT_LINES
-
-    def mouse_motion(self, event):
-        self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
-        # if self.current_mode == MODE_SELECTION_TOOL:
-        #     self.canv.delete('no')
-        #     self.canv.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
-        #     self.canv.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
 
     def draw_line_action(self, event):
         self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
@@ -279,6 +291,13 @@ class Paint(Frame):
                     self.canv.delete(self.selector_box)
                 self.selector_box = None
 
+    def mouse_motion(self, event):
+        self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
+        # if self.current_mode == MODE_SELECTION_TOOL:
+        #     self.canv.delete('no')
+        #     self.canv.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
+        #     self.canv.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
+
     def set_color(self, new_color, button):
         self.color = new_color
         for btn in self.buttons_color:
@@ -321,11 +340,16 @@ class Paint(Frame):
             self.canv.itemconfig(lineId, dash=())
 
     def change_slider(self, *args):
+        self._geometry_handler._zoom = self.zoom_slider.get()
         self._geometry_handler._angle_x = self.x_rotation_slider.get()
         self._geometry_handler._angle_y = self.y_rotation_slider.get()
         self._geometry_handler._angle_z = self.z_rotation_slider.get()
 
-        rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix()
+        rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix(
+            self._geometry_handler._angle_x,
+            self._geometry_handler._angle_y,
+            self._geometry_handler._angle_z,
+        )
         # self.canv.delete("all")
         for line in self.lines:
             points = self.points[line]
@@ -343,6 +367,7 @@ class Paint(Frame):
         self.x_rotation_slider.set(0)
         self.y_rotation_slider.set(0)
         self.z_rotation_slider.set(0)
+        self.zoom_slider.set(1)
         self.change_slider()
 
     def setUI(self):
@@ -352,11 +377,11 @@ class Paint(Frame):
         self.pack(fill=BOTH, expand=1)
 
         self.columnconfigure(6, weight=1)
-        self.rowconfigure(4, weight=1)
+        self.rowconfigure(5, weight=1)
 
         # Создаем холст с белым фоном
         self.canv = Canvas(self, bg="white", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT)
-        self.canv.grid(row=4, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        self.canv.grid(row=5, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
@@ -471,6 +496,13 @@ class Paint(Frame):
         reset_rotation_btn = Button(self, text="Reset rotation", width=10, command=self.reset_rotation)
         reset_rotation_btn.grid(row=3, column=6, sticky=W)
 
+        slider_zoom = Label(self, text="Zoom:", width=10)
+        slider_zoom.grid(row=4, column=0)
+        self.zoom_slider = Scale(self, from_=1, to=20, orient=tkinter.HORIZONTAL, resolution=0.001, showvalue=False, command=self.change_slider)
+        self.zoom_slider.set(0)
+        self.zoom_slider.place(anchor="ne")
+        self.zoom_slider.grid(row=4, column=1)
+
 
         self.cursor_text = Label(self, text="loading..")
-        self.cursor_text.grid(row=5, column=0, sticky=W)
+        self.cursor_text.grid(row=6, column=0, sticky=W)
