@@ -7,6 +7,9 @@ import math
 
 
 class Paint(Frame):
+    CANVAS_WIDTH = 840
+    CANVAS_HEIGHT = 525
+
     def __init__(self, parent):
         super().__init__()
         self.cursor_text = None
@@ -28,7 +31,7 @@ class Paint(Frame):
         self.current_mode = MODE_MAKE_LINES
         self.selector_box = None
 
-        self._geometry_handler = Geometry()
+        self._geometry_handler = None
         self.x_rotation_slider = None
         self.y_rotation_slider = None
         self.z_rotation_slider = None
@@ -343,6 +346,8 @@ class Paint(Frame):
         self.change_slider()
 
     def setUI(self):
+        # self.parent.minsize((1165, 630))
+
         self.parent.title("PyGame")
         self.pack(fill=BOTH, expand=1)
 
@@ -350,8 +355,9 @@ class Paint(Frame):
         self.rowconfigure(4, weight=1)
 
         # Создаем холст с белым фоном
-        self.canv = Canvas(self, bg="white")
+        self.canv = Canvas(self, bg="white", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT)
         self.canv.grid(row=4, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
         self.canv.bind("<B1-Motion>", self.draw_line_action)

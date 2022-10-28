@@ -3,11 +3,14 @@ import numpy as np
 
 
 class Geometry:
-    def __init__(self):
+    def __init__(self, canvas_width, canvas_height):
         self._angle_x = 0
         self._angle_y = 0
         self._angle_z = 0
         self._zoom = 0.5
+        self.CANVAS_WIDTH = canvas_width
+        self.CANVAS_HEIGHT = canvas_height
+        self.OBJECT_POSITION = [canvas_width // 2, canvas_height - 20]
 
     def _reset_rotation(self):
         self._angle_x = self._angle_y = self._angle_z = 0
@@ -25,6 +28,9 @@ class Geometry:
                              [0, z, 0]]
         print(projection_matrix)
         projected_2d = np.matmul(projection_matrix, rotated_2d)
+
+        # x = int(projected_2d[0][0]) + self.g[0]
+        # y = -int(projected_2d[1][0]) + self.OBJECT_POSITION[1]
 
         x = int(projected_2d[0][0])
         y = int(projected_2d[1][0])
