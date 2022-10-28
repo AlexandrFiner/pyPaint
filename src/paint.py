@@ -2,6 +2,8 @@ import tkinter.simpledialog
 from tkinter import *
 from tkinter import colorchooser
 from utils import *
+from src.geometry import Geometry
+import math
 
 
 class Paint(Frame):
@@ -25,6 +27,12 @@ class Paint(Frame):
         self.line_coords = (0, 0, 0, 0)
         self.current_mode = MODE_MAKE_LINES
         self.selector_box = None
+
+        self._geometry_handler = Geometry()
+        self.x_rotation_slider = None
+        self.y_rotation_slider = None
+        self.z_rotation_slider = None
+
         self.setUI()
 
     def draw_rectangle(self, start, end, **opts):
@@ -108,17 +116,6 @@ class Paint(Frame):
                 self.lines_in_group.append(lineId)
                 self.canv.itemconfig(lineId, dash=(4, 1))
 
-        # for lineId in self.selector_items:
-        #     self.lines_in_group.append(lineId)
-        #     self.canv.itemconfig(lineId, dash=(4, 1))
-        pass
-        # global x, y
-        # for x in self.selector_items:
-        #     if x not in items:
-        #         canv.itemconfig(x, fill='grey')
-        #     else:
-        #         canv.itemconfig(x, fill='blue')
-
     def update_item_points(self, line):
         z1, z2 = 0.0, 0.0
         if line in self.points:
@@ -183,10 +180,10 @@ class Paint(Frame):
 
     def mouse_motion(self, event):
         self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
-        if self.current_mode == MODE_SELECTION_TOOL:
-            self.canv.delete('no')
-            self.canv.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
-            self.canv.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
+        # if self.current_mode == MODE_SELECTION_TOOL:
+        #     self.canv.delete('no')
+        #     self.canv.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
+        #     self.canv.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
 
     def draw_line_action(self, event):
         self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
@@ -227,7 +224,7 @@ class Paint(Frame):
                 if self.selector_box is not None:
                     self.canv.delete(self.selector_box)
 
-                self.selector_box = self.draw_rectangle(self.cursor_start, (event.x, event.y), fill="", width=2)
+                self.selector_box = self.draw_rectangle(self.cursor_start, (event.x, event.y), fill="", outline="black", width=2, dash=(2, 6))
                 self.select_action(self.cursor_start, (event.x, event.y))
 
     def draw_line_end(self, event):
@@ -302,7 +299,7 @@ class Paint(Frame):
         for btn in self.buttons_mode:
             btn['state'] = NORMAL
         button['state'] = DISABLED
-        self.canv.delete('no')
+        # self.canv.delete('no')
 
     def clear_canv(self):
         self.canv.delete("all")
@@ -320,16 +317,41 @@ class Paint(Frame):
         for lineId in self.lines:
             self.canv.itemconfig(lineId, dash=())
 
+    def change_slider(self, *args):
+        self._geometry_handler._angle_x = self.x_rotation_slider.get()
+        self._geometry_handler._angle_y = self.y_rotation_slider.get()
+        self._geometry_handler._angle_z = self.z_rotation_slider.get()
+
+        rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix()
+        # self.canv.delete("all")
+        for line in self.lines:
+            points = self.points[line]
+            print(points)
+            x1, y1 = self._geometry_handler.transform_point(([[points[0]], [points[1]], [points[2]]]), rot_x, rot_y, rot_z)
+            x, y = self._geometry_handler.transform_point(([[points[3]], [points[4]], [points[5]]]), rot_x, rot_y, rot_z)
+            self.canv.coords(line, x1, y1, x, y)
+            # self.canv.create_line(x, y, x1, y1, fill=self.color, width=self.brush_size)
+                # print(x1, y1, x, y)
+        # self.canv.delete("all")
+
+        pass
+
+    def reset_rotation(self):
+        self.x_rotation_slider.set(0)
+        self.y_rotation_slider.set(0)
+        self.z_rotation_slider.set(0)
+        self.change_slider()
+
     def setUI(self):
         self.parent.title("PyGame")
         self.pack(fill=BOTH, expand=1)
 
         self.columnconfigure(6, weight=1)
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(4, weight=1)
 
         # Создаем холст с белым фоном
         self.canv = Canvas(self, bg="white")
-        self.canv.grid(row=3, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        self.canv.grid(row=4, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
         self.canv.bind("<B1-Motion>", self.draw_line_action)
@@ -419,5 +441,30 @@ class Paint(Frame):
         mode_ungroup = Button(self, text="Ungroup", width=10, command=self.ungroup_lines)
         mode_ungroup.grid(row=2, column=6, sticky=W)
 
+        slider_x = Label(self, text="X Rotation:", width=10)
+        slider_x.grid(row=3, column=0)
+        self.x_rotation_slider = Scale(self, from_=-math.pi, to=math.pi, orient=tkinter.HORIZONTAL, resolution=0.01, showvalue=False, command=self.change_slider)
+        self.x_rotation_slider.set(0)
+        self.x_rotation_slider.place(anchor="ne")
+        self.x_rotation_slider.grid(row=3, column=1)
+
+        slider_y = Label(self, text="Y Rotation:", width=10)
+        slider_y.grid(row=3, column=2)
+        self.y_rotation_slider = Scale(self, from_=-math.pi, to=math.pi, orient=tkinter.HORIZONTAL, resolution=0.01, showvalue=False, command=self.change_slider)
+        self.y_rotation_slider.set(0)
+        self.y_rotation_slider.place(anchor="ne")
+        self.y_rotation_slider.grid(row=3, column=3)
+
+        slider_z = Label(self, text="Z Rotation:", width=10)
+        slider_z.grid(row=3, column=4)
+        self.z_rotation_slider = Scale(self, from_=-math.pi, to=math.pi, orient=tkinter.HORIZONTAL, resolution=0.01, showvalue=False, command=self.change_slider)
+        self.z_rotation_slider.set(0)
+        self.z_rotation_slider.place(anchor="ne")
+        self.z_rotation_slider.grid(row=3, column=5)
+
+        reset_rotation_btn = Button(self, text="Reset rotation", width=10, command=self.reset_rotation)
+        reset_rotation_btn.grid(row=3, column=6, sticky=W)
+
+
         self.cursor_text = Label(self, text="loading..")
-        self.cursor_text.grid(row=4, column=0, sticky=W)
+        self.cursor_text.grid(row=5, column=0, sticky=W)
