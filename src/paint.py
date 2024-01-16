@@ -1,10 +1,20 @@
 import tkinter.simpledialog
+import tkinter.filedialog
+import tkinter.messagebox
+import json
 from tkinter import *
 from tkinter import colorchooser
 from utils import *
 from src.geometry import Geometry
 import math
+from json import JSONEncoder, JSONDecoder
 
+class MyEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Line) or isinstance(obj, Point):
+            return obj.__dict__()
+        else:
+            return JSONEncoder.default(self, obj)
 
 class Paint(Frame):
     CANVAS_WIDTH = 840
@@ -129,30 +139,23 @@ class Paint(Frame):
         coords = self.canv.coords(line)
 
 
-        self._geometry_handler._zoom = self.zoom_slider.get()
         self._geometry_handler._angle_x = self.x_rotation_slider.get()
         self._geometry_handler._angle_y = self.y_rotation_slider.get()
         self._geometry_handler._angle_z = self.z_rotation_slider.get()
-
         rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix(
-            0 - self._geometry_handler._angle_x,
-            0 - self._geometry_handler._angle_y,
-            0 - self._geometry_handler._angle_z,
+            self._geometry_handler._angle_x,
+            self._geometry_handler._angle_y,
+            self._geometry_handler._angle_z,
         )
-
-        x1, y1 = self._geometry_handler.transform_point(([
-            [coords[0]],
-            [coords[1]],
-            [z1]
-        ]), rot_x, rot_y, rot_z)
-        print(x1, y1)
+        x1, y1, z1 = self._geometry_handler.inverse_transform_point(coords[0], coords[1], rot_x, rot_y, rot_z)
+        x2, y2, z2 = self._geometry_handler.inverse_transform_point(coords[2], coords[3], rot_x, rot_y, rot_z)
 
         self.points[line] = [
-            coords[0],
-            coords[1],
+            x1,
+            y1,
             z1,
-            coords[2],
-            coords[3],
+            x2,
+            y2,
             z2
         ]
 
@@ -224,7 +227,6 @@ class Paint(Frame):
                                      self.line_coords[3] + move[1]
                                      )
                 else:
-                    print(x1, y1, x, y)
                     for lineId in self.lines_in_group:
                         line_coords = self.points[lineId]
                         self.canv.coords(lineId,
@@ -298,6 +300,85 @@ class Paint(Frame):
         #     self.canv.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
         #     self.canv.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
 
+    def save_project(self):
+        data = dict()
+
+        all_items = self.canv.find_all()
+        lines = [item for item in all_items if self.canv.type(item) == "line"]
+
+        for line in lines:
+            data[line] = {
+                "points": self.points[line],
+                "color":  self.canv.itemcget(line, "fill"),
+                "width":  self.canv.itemcget(line, "width"),
+            }
+
+        file_path = tkinter.filedialog.asksaveasfilename(
+            filetypes=[('JSON File', '*.json')],
+        )
+        if file_path != "":
+            try:
+                with open(file_path, "w", encoding="utf-8") as file:
+                    json.dump(data, file, cls=MyEncoder)
+                tkinter.messagebox.showinfo("Сохранение", "Файл успешно сохранен!")
+            except Exception as e:
+                tkinter.messagebox.showerror("Ошибка сохранения", "Ошибка при записи в файл!")
+        else:
+            tkinter.messagebox.showinfo("Сохранение", "Файл не был сохранен!")
+
+    def decode_object(self, obj):
+        # if 'p1' and 'p2' in obj:
+        #     p1_dict = obj['p1']
+        #     p2_dict = obj['p2']
+        #     return Line(
+        #         Point(
+        #             p1_dict['x'],
+        #             p1_dict['y'],
+        #             p1_dict['z'],
+        #             p1_dict['ok']
+        #         ),
+        #         Point(
+        #             p2_dict['x'],
+        #             p2_dict['y'],
+        #             p2_dict['z'],
+        #             p2_dict['ok']
+        #         ),
+        #         obj['color'],
+        #         obj['width']
+        #     )
+        return obj
+
+
+    def load_project(self):
+        file_path = tkinter.filedialog.askopenfilename(
+            filetypes=[('JSON File', '*.json')],
+        )
+        if file_path != "":
+            try:
+                self.canv.delete("all")
+                self.points.clear()
+                self.lines_in_group = []
+                self.lines = []
+
+                with open(file_path, "r", encoding="utf-8") as file:
+                    data = json.load(file, object_hook=self.decode_object)
+                    for (line, line_data) in data.items():
+                        color = line_data['color']
+                        width = line_data['width']
+
+                        current_line = self.canv.create_line(line_data['points'][0], line_data['points'][1], line_data['points'][3], line_data['points'][4], fill=color, width=width)
+                        self.lines.append(current_line)
+                        self.points[current_line] = line_data['points']
+                    # self.lines = json.load(file, object_hook=self.decode_object)
+
+                self.reset_rotation()
+                tkinter.messagebox.showinfo("Загрузка", "Файл успешно открыт!")
+            except Exception as e:
+                print(e)
+                tkinter.messagebox.showerror("Ошибка загрузки", "Ошибка при чтении файла!")
+        else:
+            tkinter.messagebox.showinfo("Загрузка", "Файл не выбран!")
+
     def set_color(self, new_color, button):
         self.color = new_color
         for btn in self.buttons_color:
@@ -350,18 +431,22 @@ class Paint(Frame):
             self._geometry_handler._angle_y,
             self._geometry_handler._angle_z,
         )
-        # self.canv.delete("all")
+
         for line in self.lines:
             points = self.points[line]
-            print(points)
             x1, y1 = self._geometry_handler.transform_point(([[points[0]], [points[1]], [points[2]]]), rot_x, rot_y, rot_z)
             x, y = self._geometry_handler.transform_point(([[points[3]], [points[4]], [points[5]]]), rot_x, rot_y, rot_z)
             self.canv.coords(line, x1, y1, x, y)
-            # self.canv.create_line(x, y, x1, y1, fill=self.color, width=self.brush_size)
-                # print(x1, y1, x, y)
-        # self.canv.delete("all")
 
         pass
+
+    def set_view_mode(self, mode):
+        if mode == 1:
+            pass
+        if mode == 2:
+            pass
+        if mode == 3:
+            pass
 
     def reset_rotation(self):
         self.x_rotation_slider.set(0)
@@ -381,7 +466,7 @@ class Paint(Frame):
 
         # Создаем холст с белым фоном
         self.canv = Canvas(self, bg="white", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT)
-        self.canv.grid(row=5, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        self.canv.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
@@ -503,6 +588,22 @@ class Paint(Frame):
         self.zoom_slider.place(anchor="ne")
         self.zoom_slider.grid(row=4, column=1)
 
+        preset = Label(self, text="Вид: ")
+        preset.grid(row=5, column=0, padx=0)
+        one_btn = Button(self, text="XY", width=10, command=lambda: self.set_view_mode(1))
+        one_btn.grid(row=5, column=1)
+        one_btn = Button(self, text="ZY", width=10, command=lambda: self.set_view_mode(2))
+        one_btn.grid(row=5, column=2)
+        one_btn = Button(self, text="XZ", width=10, command=lambda: self.set_view_mode(3))
+        one_btn.grid(row=5, column=3)
+
+        preset = Label(self, text="Файл: ")
+        preset.grid(row=6, column=0, padx=0)
+        one_btn = Button(self, text="Сохранить проект", width=10, command=self.save_project)
+        one_btn.grid(row=6, column=1)
+        one_btn = Button(self, text="Загрузить проект", width=10, command=self.load_project)
+        one_btn.grid(row=6, column=2)
+
 
         self.cursor_text = Label(self, text="loading..")
-        self.cursor_text.grid(row=6, column=0, sticky=W)
+        self.cursor_text.grid(row=8, column=0, sticky=W)
