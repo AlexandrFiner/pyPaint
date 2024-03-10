@@ -12,6 +12,7 @@ def about():
 def main():
     root = Tk()
     app = Paint(root)
+    # root.geometry("{}x{}+0+0".format(1000, 1900))
     m = Menu(root)
     root.config(menu=m)
 

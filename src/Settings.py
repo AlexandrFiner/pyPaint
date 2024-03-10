@@ -17,7 +17,7 @@ CANVAS_TEXT_FONT = "Arial 10"
 # WINDOW.resizable(False, False)
 #
 # # canvas initialization
-LEN = 10000
+LEN = 1000
 MAXY = LEN
 MAXX = LEN
 MINX = -LEN

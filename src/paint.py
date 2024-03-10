@@ -23,8 +23,8 @@ class MyEncoder(JSONEncoder):
 
 
 class Paint(Frame):
-    CANVAS_WIDTH = 840
-    CANVAS_HEIGHT = 525
+    CANVAS_WIDTH = 1000
+    CANVAS_HEIGHT = 1900
 
     def __init__(self, parent):
         super().__init__()
@@ -65,7 +65,6 @@ class Paint(Frame):
         self.current_mouse = None
 
         # objects
-        self.current_zero_coord = [0, 0]
         self.transit_line_deltas = None
         self.current_mouse = None
         self.prev_mouse = None
@@ -203,6 +202,20 @@ class Paint(Frame):
                 self.line_points[0] = self._get_mouse_projection_point()
 
         if self.current_mode == MODE_MOVE_LINES:
+            mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x, self.current_zero_coord[1] + event.y)
+            flag = False
+            for i in range(len(self.lines)):
+                if self._is_cursor_on_line(mouse[0], mouse[1], self.lines[i]):
+                    self.current_line = self.lines[i]
+                    flag = True
+                    break
+            if not flag:
+                self.current_line = None
+            self.current_lines = []
+            # self._set_color_width_from_line(self.current_line)
+            # self._fill_status_bar(mouse[0], mouse[1])
+            self.redraw_scene()
+
             if self.current_action == EVENT_NONE:
                 self.current_action = EVENT_MOVE_LINE
 
@@ -217,6 +230,7 @@ class Paint(Frame):
         self.redraw_scene()
 
     def draw_line_action(self, event):
+        print(event.x, self.current_zero_coord[0])
         self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
                                                      self.current_zero_coord[1] + event.y)
         self.redraw_scene()
@@ -441,6 +455,12 @@ class Paint(Frame):
         else:
             tkinter.messagebox.showerror("Ошибка", "Пустое полотно!")
 
+    def reset_scroll(self):
+        self.x_bar.set(0, 0)
+        self.y_bar.set(0, 0)
+        self.current_zero_coord = [0, 0]
+        self.redraw_scene()
+
     def group_lines(self):
         for lineId in self.lines:
             self.lines_in_group.append(lineId)
@@ -454,28 +474,6 @@ class Paint(Frame):
         # for lineId in self.lines:
         #     self.canvas.itemconfig(lineId, dash=())
 
-    def change_slider(self, *args):
-        self._geometry_handler._zoom = self.zoom_slider.get()
-        self._geometry_handler._angle_x = self.x_rotation_slider.get()
-        self._geometry_handler._angle_y = self.y_rotation_slider.get()
-        self._geometry_handler._angle_z = self.z_rotation_slider.get()
-
-        rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix(
-            self._geometry_handler._angle_x,
-            self._geometry_handler._angle_y,
-            self._geometry_handler._angle_z,
-        )
-
-        for line in self.lines:
-            points = self.points[line]
-            x1, y1 = self._geometry_handler.transform_point(([[points[0]], [points[1]], [points[2]]]), rot_x, rot_y,
-                                                            rot_z)
-            x, y = self._geometry_handler.transform_point(([[points[3]], [points[4]], [points[5]]]), rot_x, rot_y,
-                                                          rot_z)
-            self.canvas.coords(line, x1, y1, x, y)
-
-        pass
-
     def set_view_mode(self, mode):
         if mode == 1:
             pass
@@ -488,6 +486,8 @@ class Paint(Frame):
         # self.parent.minsize((1165, 630))
 
         self.parent.title("PyPaint")
+        # self.parent.geometry("{}x{}+0+0".format(1000, 1900))
+        # self.parent.resizable(False, False)
         self.pack(fill=BOTH, expand=1)
 
         # self.columnconfigure(6, weight=1)
@@ -497,7 +497,8 @@ class Paint(Frame):
 
         # Создаем холст с белым фоном
         self.canvas = Canvas(self, bg="grey", cursor="pencil", scrollregion=(MINX, MINY, MAXX, MAXY))
-        self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
+        # self.parent.geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
+        # self.parent.geometry("{}x{}+0+0".format(self.CANVAS_WIDTH, self.CANVAS_HEIGHT))
 
         # # scrollbars for canvas
         self.x_bar = Scrollbar(self.canvas, orient=HORIZONTAL, cursor="fleur")
@@ -579,6 +580,7 @@ class Paint(Frame):
         actions = Label(self, text="Действия: ")
         clear_btn = Button(self, text="Очистить", width=10, command=self.clear_canv)
         trimetric_matrix_button = Button(self, text="Осмотр", width=10, command=self.open_trimetric_form)
+        reset_scroll = Button(self, text="Сброс вида", width=10, command=self.reset_scroll)
 
         label_file = Label(self, text="Файл: ")
         save_project = Button(self, text="Сохранить проект", width=10, command=self.save_project)
@@ -610,6 +612,7 @@ class Paint(Frame):
         actions.grid(row=5, column=0, padx=0, sticky=NSEW)
         clear_btn.grid(row=5, column=1, sticky=NSEW)
         trimetric_matrix_button.grid(row=5, column=2, sticky=NSEW)
+        # reset_scroll.grid(row=5, column=3, sticky=NSEW)
         label_file.grid(row=6, column=0, padx=0, sticky=NSEW)
         save_project.grid(row=6, column=1, sticky=NSEW)
         load_project.grid(row=6, column=2, sticky=NSEW)
