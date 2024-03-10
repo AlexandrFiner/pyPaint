@@ -8,6 +8,8 @@ from utils import *
 from src.geometry import Geometry
 import math
 from json import JSONEncoder, JSONDecoder
+from src.TrimetricForm import TrimetricForm
+
 
 class MyEncoder(JSONEncoder):
     def default(self, obj):
@@ -16,12 +18,15 @@ class MyEncoder(JSONEncoder):
         else:
             return JSONEncoder.default(self, obj)
 
+
 class Paint(Frame):
     CANVAS_WIDTH = 840
     CANVAS_HEIGHT = 525
 
     def __init__(self, parent):
         super().__init__()
+        self.y_bar = None
+        self.x_bar = None
         self.cursor_text = None
         self.canv = None
         self.parent = parent
@@ -41,6 +46,7 @@ class Paint(Frame):
         self.current_mode = MODE_MAKE_LINES
         self.selector_box = None
         self.center_point = (0, 0)
+        self.current_zero_coord = [0, 0]
 
         self._geometry_handler = None
         self.x_rotation_slider = None
@@ -404,6 +410,13 @@ class Paint(Frame):
         self.lines_in_group = []
         self.lines = []
 
+    def open_trimetric_form(self):
+        if len(self.lines) != 0:
+            form = TrimetricForm(self)
+            form.grab_set()
+        else:
+            tkinter.messagebox.showerror("Ошибка", "Пустое полотно!")
+
     def group_lines(self):
         for lineId in self.lines:
             self.lines_in_group.append(lineId)
@@ -452,20 +465,33 @@ class Paint(Frame):
     def setUI(self):
         # self.parent.minsize((1165, 630))
 
-        self.parent.title("PyGame")
+        self.parent.title("PyPaint")
         self.pack(fill=BOTH, expand=1)
 
         self.columnconfigure(6, weight=1)
         self.rowconfigure(9, weight=1)
 
         # Создаем холст с белым фоном
-        self.canv = Canvas(self, bg="white", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT)
+        AREA = 10000
+        self.canv = Canvas(self, bg="white", cursor="pencil", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT,
+                           scrollregion=(-AREA, -AREA, AREA, AREA))
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
+
+        # # scrollbars for canvas
+        self.x_bar = Scrollbar(self.canv, orient=HORIZONTAL, cursor="fleur")
+        # self.x_bar.pack(side=BOTTOM, fill=X)
+        # self.x_bar.config(command=self.canv.xview)
+
+        # self.y_bar = Scrollbar(self.canv, orient=VERTICAL, cursor="fleur")
+        # self.y_bar.pack(side=RIGHT, fill=Y)
+        # self.y_bar.config(command=self.canv.yview)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
         self.canv.bind("<B1-Motion>", self.draw_line_action)
         self.canv.bind("<ButtonRelease-1>", self.draw_line_end)
         self.canv.bind("<Motion>", self.mouse_motion)
+        # self.x_bar.bind("<B1-Motion>", self._update_zero_x_coord)
+        # self.y_bar.bind("<B1-Motion>", self._update_zero_y_coord)
 
         # создаем метку для кнопок изменения цвета кисти
         color_lab = Label(self, text="Цвет: ")
@@ -563,6 +589,8 @@ class Paint(Frame):
         preset.grid(row=5, column=0, padx=0)
         clear_btn = Button(self, text="Очистить", width=10, command=self.clear_canv)
         clear_btn.grid(row=5, column=1, sticky=W)
+        trimetric_matrix_button = Button(self, text="Осмотр", width=10, command=self.open_trimetric_form)
+        trimetric_matrix_button.grid(row=5, column=2, sticky=W)
 
         preset = Label(self, text="Файл: ")
         preset.grid(row=6, column=0, padx=0)
@@ -573,5 +601,48 @@ class Paint(Frame):
 
         self.canv.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
 
+
         self.cursor_text = Label(self, text="loading..")
         self.cursor_text.grid(row=8, column=0, sticky=W)
+
+    # render methods
+    # redraw scene
+    def redraw_scene(self):
+        self.canvas.delete("all")
+        # draw lines primitive
+        for i in range(len(self.lines)):
+            self._draw_line(self.lines[i])
+
+    def _draw_line(self, line):
+        if isinstance(line, Line):
+            canvas_x1, canvas_y1 = self._get_canvas_coord_from_projection_point(line.p1)
+            canvas_x2, canvas_y2 = self._get_canvas_coord_from_projection_point(line.p2)
+            # drawing line
+            self.canvas.create_line(
+                canvas_x1,
+                canvas_y1,
+                canvas_x2,
+                canvas_y2,
+                width=line.width,
+                fill="red" if (self.current_line == line or line in self.current_lines)
+                              and self.work_mode != WorkingMode.add_mode else line.color,
+                smooth=True
+            )
+            # drawing line text
+            if self.line_text_flag:
+                canvas_p1_projection = self._get_canvas_coord_from_projection_point(line.p1)
+                canvas_p2_projection = self._get_canvas_coord_from_projection_point(line.p2)
+                anchor_p1 = self._get_line_text_anchor(canvas_p1_projection)
+                anchor_p2 = self._get_line_text_anchor(canvas_p2_projection)
+                opt1 = self._get_line_text_options(line.p1, anchor_p1)
+                opt2 = self._get_line_text_options(line.p2, anchor_p2)
+                self.canvas.create_text(canvas_p1_projection[0], canvas_p1_projection[1], opt1)
+                self.canvas.create_text(canvas_p2_projection[0], canvas_p2_projection[1], opt2)
+
+    # transit zero coord by x-scrollbar
+    def _update_zero_x_coord(self, event):
+        self.current_zero_coord[0] = int(self.x_bar.get()[0] * 2 * MAXX + MINX)
+
+    # transit zero coord by y_scrollbar
+    def _update_zero_y_coord(self, event):
+        self.current_zero_coord[1] = int(self.y_bar.get()[0] * 2 * MAXY + MINY)
