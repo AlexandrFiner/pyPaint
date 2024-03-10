@@ -36,7 +36,7 @@ class TrimetricForm(Toplevel):
         check = (self.register(self._is_valid), "%P")
 
         # objects
-        self.field = Canvas(self, bg="white", scrollregion=(MINX, MINY, MAXX, MAXY))
+        self.field = Canvas(self, bg="grey", scrollregion=(MINX, MINY, MAXX, MAXY))
         self.scroll_x = Scrollbar(self.field, orient=HORIZONTAL, command=self.field.xview, cursor="fleur")
         self.scroll_y = Scrollbar(self.field, orient=VERTICAL, command=self.field.yview, cursor="fleur")
         self.scroll_x.pack(side=BOTTOM, fill=X)

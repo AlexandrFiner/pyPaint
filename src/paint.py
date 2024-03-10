@@ -5,8 +5,10 @@ import json
 from tkinter import *
 from tkinter import colorchooser
 from utils import *
+from src.Enums import *
 from src.geometry import Geometry
 from src.Primitives import *
+from src.Settings import *
 import math
 from json import JSONEncoder, JSONDecoder
 from src.TrimetricForm import TrimetricForm
@@ -26,10 +28,12 @@ class Paint(Frame):
 
     def __init__(self, parent):
         super().__init__()
+        self.projection_mode = ProjectionMode.xy
+        self.line_text_flag = True
         self.y_bar = None
         self.x_bar = None
         self.cursor_text = None
-        self.canv = None
+        self.canvas = None
         self.parent = parent
         self.brush_size = None
         self.color = "red"
@@ -55,11 +59,19 @@ class Paint(Frame):
         self.z_rotation_slider = None
         self.zoom_slider = None
 
+        self.xy_button = None
+        self.zy_button = None
+        self.xz_button = None
+
+        self.line_points = [None, None]
+
+        self.current_mouse = None
+
         self.setUI()
 
     def draw_rectangle(self, start, end, **opts):
         """Draw the rectangle"""
-        return self.canv.create_rectangle(*(list(start) + list(end)), **opts)
+        return self.canvas.create_rectangle(*(list(start) + list(end)), **opts)
 
     def hit_test(self, start, end, tags=None, ignoretags=None, ignore=[]):
         def groups(glist, numPerGroup=2):
@@ -103,14 +115,14 @@ class Paint(Frame):
         if tags:
             tocheck = []
             for tag in tags:
-                tocheck.extend(self.canv.find_withtag(tag))
+                tocheck.extend(self.canvas.find_withtag(tag))
         else:
-            tocheck = self.canv.find_all()
+            tocheck = self.canvas.find_all()
         tocheck = [x for x in tocheck if x != self.selector_box]
         if ignoretags:
             if not hasattr(ignoretags, '__iter__'):
                 ignoretags = [ignoretags]
-            tocheck = [x for x in tocheck if x not in self.canv.find_withtag(it) for it in ignoretags]
+            tocheck = [x for x in tocheck if x not in self.canvas.find_withtag(it) for it in ignoretags]
 
         self.selector_items = tocheck
 
@@ -124,7 +136,7 @@ class Paint(Frame):
         items = []
         for item in tocheck:
             if item not in ignore:
-                x, y = average(groups(self.canv.coords(item)))
+                x, y = average(groups(self.canvas.coords(item)))
                 if (xlow < x < xhigh) and (ylow < y < yhigh):
                     items.append(item)
 
@@ -136,15 +148,14 @@ class Paint(Frame):
         for lineId in self.selector_items:
             if lineId in items:
                 self.lines_in_group.append(lineId)
-                self.canv.itemconfig(lineId, dash=(4, 1))
+                self.canvas.itemconfig(lineId, dash=(4, 1))
 
     def update_item_points(self, line):
         z1, z2 = 0.0, 0.0
         if line in self.points:
             z1, z2 = self.points[line][2], self.points[line][5]
 
-        coords = self.canv.coords(line)
-
+        coords = self.canvas.coords(line)
 
         self._geometry_handler._angle_x = self.x_rotation_slider.get()
         self._geometry_handler._angle_y = self.y_rotation_slider.get()
@@ -172,12 +183,12 @@ class Paint(Frame):
                 x, y = event.x, event.y
                 self.cursor_start = (x, y)
                 self.current_line = event.widget.find_withtag('current')[0]
-                self.line_coords = self.canv.coords(self.current_line)
+                self.line_coords = self.canvas.coords(self.current_line)
                 self.current_action = EVENT_MOVE_LINE
 
         if self.current_mode == MODE_DELETE_LINES:
             self.current_line = event.widget.find_withtag('current')[0]
-            self.canv.delete(self.current_line)
+            self.canvas.delete(self.current_line)
             self.points.pop(self.current_line)
             self.lines.remove(self.current_line)
             if self.current_line in self.lines_in_group:
@@ -190,13 +201,13 @@ class Paint(Frame):
             self.points[self.current_line][5] = z
 
     def draw_line_start(self, event):
+        self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
+                                                     self.current_zero_coord[1] + event.y)
+        self.line_points = [None, None]
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_NONE:
                 self.current_action = EVENT_DRAW_LINE
-                x, y = event.x, event.y
-                self.cursor_start = (x, y)
-                self.current_line = self.canv.create_line(x, y, x, y, fill=self.color, width=self.brush_size.get())
-                self.canv.tag_bind(self.current_line, '<Button-1>', self.click_on_line)
+                self.line_points[0] = self._get_mouse_projection_point()
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_NONE and self.lines_in_group:
@@ -212,67 +223,82 @@ class Paint(Frame):
 
     def draw_line_action(self, event):
         self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
+        self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
+                                                     self.current_zero_coord[1] + event.y)
+        self.redraw_scene()
 
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_DRAW_LINE:
-                x1, y1 = self.cursor_start
-                x, y = event.x, event.y
-                self.canv.coords(self.current_line, x1, y1, x, y)
+                self.line_points[1] = self._get_mouse_projection_point()
+                buffer_line = Line(
+                    self.line_points[0],
+                    self.line_points[1],
+                    self.color,
+                    self.brush_size.get()
+                )
+                self.current_line = buffer_line
+                self._draw_line(self.current_line)
+
+                # x1, y1 = self.cursor_start
+                # x, y = event.x, event.y
+                # self.canvas.coords(self.current_line, x1, y1, x, y)
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
                 x1, y1 = self.cursor_start
                 x, y = event.x, event.y
 
-                move = x-x1, y-y1
+                move = x - x1, y - y1
 
                 if not self.lines_in_group:
-                    self.canv.coords(self.current_line,
-                                     self.line_coords[0] + move[0],
-                                     self.line_coords[1] + move[1],
-                                     self.line_coords[2] + move[0],
-                                     self.line_coords[3] + move[1]
-                                     )
+                    self.canvas.coords(self.current_line,
+                                       self.line_coords[0] + move[0],
+                                       self.line_coords[1] + move[1],
+                                       self.line_coords[2] + move[0],
+                                       self.line_coords[3] + move[1]
+                                       )
                 else:
                     for lineId in self.lines_in_group:
                         line_coords = self.points[lineId]
-                        self.canv.coords(lineId,
-                                         line_coords[0] + move[0],
-                                         line_coords[1] + move[1],
-                                         line_coords[3] + move[0],
-                                         line_coords[4] + move[1]
-                                         )
+                        self.canvas.coords(lineId,
+                                           line_coords[0] + move[0],
+                                           line_coords[1] + move[1],
+                                           line_coords[3] + move[0],
+                                           line_coords[4] + move[1]
+                                           )
 
         if self.current_mode == MODE_SELECTION_TOOL:
             if self.current_action == EVENT_SELECT_LINES:
                 if self.selector_box is not None:
-                    self.canv.delete(self.selector_box)
+                    self.canvas.delete(self.selector_box)
 
-                self.selector_box = self.draw_rectangle(self.cursor_start, (event.x, event.y), fill="", outline="black", width=2, dash=(2, 6))
+                self.selector_box = self.draw_rectangle(self.cursor_start, (event.x, event.y), fill="", outline="black",
+                                                        width=2, dash=(2, 6))
                 self.select_action(self.cursor_start, (event.x, event.y))
 
     def draw_line_end(self, event):
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_DRAW_LINE:
                 self.current_action = EVENT_NONE
-                x1, y1 = self.cursor_start
-                x, y = event.x, event.y
-                self.canv.coords(self.current_line, x1, y1, x, y)
-                if abs(x-x1) < 2 and abs(y-y1) < 2:
-                    self.canv.delete(self.current_line)
-                else:
-                    line = Line(
-                        Point(
-                            x1, y1, 0
-                        ),
-                        Point(
-                            x, y, 0
-                        ),
-                        self.color,
-                        self.brush_size.get()
-                    )
-                    self.update_item_points(self.current_line)
-                    self.lines.append(line)
+                self.lines.append(self.current_line)
+                # x1, y1 = self.cursor_start
+                # x, y = event.x, event.y
+                # self.canvas.coords(self.current_line, x1, y1, x, y)
+                # if abs(x-x1) < 2 and abs(y-y1) < 2:
+                #     self.canvas.delete(self.current_line)
+                # else:
+                #     line = Line(
+                #         Point(
+                #             x1, y1, 0
+                #         ),
+                #         Point(
+                #             x, y, 0
+                #         ),
+                #         self.color,
+                #         self.brush_size.get()
+                #     )
+                #     self.lines.append(line)
+                #     self.redraw_scene()
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
@@ -283,60 +309,48 @@ class Paint(Frame):
 
                 move = x - x1, y - y1
                 if not self.lines_in_group:
-                    self.canv.coords(self.current_line,
-                                     self.line_coords[0] + move[0],
-                                     self.line_coords[1] + move[1],
-                                     self.line_coords[2] + move[0],
-                                     self.line_coords[3] + move[1]
-                                     )
+                    self.canvas.coords(self.current_line,
+                                       self.line_coords[0] + move[0],
+                                       self.line_coords[1] + move[1],
+                                       self.line_coords[2] + move[0],
+                                       self.line_coords[3] + move[1]
+                                       )
 
-                    self.update_item_points(self.current_line)
+                    # self.update_item_points(self.current_line)
                 else:
                     for lineId in self.lines_in_group:
                         line_coords = self.points[lineId]
-                        self.canv.coords(lineId,
-                                         line_coords[0] + move[0],
-                                         line_coords[1] + move[1],
-                                         line_coords[3] + move[0],
-                                         line_coords[4] + move[1]
-                                         )
+                        self.canvas.coords(lineId,
+                                           line_coords[0] + move[0],
+                                           line_coords[1] + move[1],
+                                           line_coords[3] + move[0],
+                                           line_coords[4] + move[1]
+                                           )
 
-                        self.update_item_points(lineId)
+                        # self.update_item_points(lineId)
 
         if self.current_mode == MODE_SELECTION_TOOL:
             if self.current_action == EVENT_SELECT_LINES:
                 self.current_action = EVENT_NONE
                 if self.selector_box is not None:
-                    self.canv.delete(self.selector_box)
+                    self.canvas.delete(self.selector_box)
                 self.selector_box = None
 
     def mouse_motion(self, event):
         self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
         # if self.current_mode == MODE_SELECTION_TOOL:
-        #     self.canv.delete('no')
-        #     self.canv.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
-        #     self.canv.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
+        #     self.canvas.delete('no')
+        #     self.canvas.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
+        #     self.canvas.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
 
     def save_project(self):
-        data = dict()
-
-        all_items = self.canv.find_all()
-        lines = [item for item in all_items if self.canv.type(item) == "line"]
-
-        for line in lines:
-            data[line] = {
-                "points": self.points[line],
-                "color":  self.canv.itemcget(line, "fill"),
-                "width":  self.canv.itemcget(line, "width"),
-            }
-
         file_path = tkinter.filedialog.asksaveasfilename(
             filetypes=[('JSON File', '*.json')],
         )
         if file_path != "":
             try:
                 with open(file_path, "w", encoding="utf-8") as file:
-                    json.dump(data, file, cls=MyEncoder)
+                    json.dump(self.lines, file, cls=MyEncoder)
                 tkinter.messagebox.showinfo("Сохранение", "Файл успешно сохранен!")
             except Exception as e:
                 tkinter.messagebox.showerror("Ошибка сохранения", "Ошибка при записи в файл!")
@@ -344,27 +358,26 @@ class Paint(Frame):
             tkinter.messagebox.showinfo("Сохранение", "Файл не был сохранен!")
 
     def decode_object(self, obj):
-        # if 'p1' and 'p2' in obj:
-        #     p1_dict = obj['p1']
-        #     p2_dict = obj['p2']
-        #     return Line(
-        #         Point(
-        #             p1_dict['x'],
-        #             p1_dict['y'],
-        #             p1_dict['z'],
-        #             p1_dict['ok']
-        #         ),
-        #         Point(
-        #             p2_dict['x'],
-        #             p2_dict['y'],
-        #             p2_dict['z'],
-        #             p2_dict['ok']
-        #         ),
-        #         obj['color'],
-        #         obj['width']
-        #     )
+        if 'p1' and 'p2' in obj:
+            p1_dict = obj['p1']
+            p2_dict = obj['p2']
+            return Line(
+                Point(
+                    p1_dict['x'],
+                    p1_dict['y'],
+                    p1_dict['z'],
+                    p1_dict['ok']
+                ),
+                Point(
+                    p2_dict['x'],
+                    p2_dict['y'],
+                    p2_dict['z'],
+                    p2_dict['ok']
+                ),
+                obj['color'],
+                obj['width']
+            )
         return obj
-
 
     def load_project(self):
         file_path = tkinter.filedialog.askopenfilename(
@@ -372,23 +385,15 @@ class Paint(Frame):
         )
         if file_path != "":
             try:
-                self.canv.delete("all")
+                self.canvas.delete("all")
                 self.points.clear()
                 self.lines_in_group = []
                 self.lines = []
 
                 with open(file_path, "r", encoding="utf-8") as file:
-                    data = json.load(file, object_hook=self.decode_object)
-                    for (line, line_data) in data.items():
-                        color = line_data['color']
-                        width = line_data['width']
+                    self.lines = json.load(file, object_hook=self.decode_object)
 
-                        current_line = self.canv.create_line(line_data['points'][0], line_data['points'][1], line_data['points'][3], line_data['points'][4], fill=color, width=width)
-                        self.lines.append(current_line)
-                        self.points[current_line] = line_data['points']
-                    # self.lines = json.load(file, object_hook=self.decode_object)
-
-                self.reset_rotation()
+                self.redraw_scene()
                 tkinter.messagebox.showinfo("Загрузка", "Файл успешно открыт!")
             except Exception as e:
                 print(e)
@@ -413,10 +418,10 @@ class Paint(Frame):
         for btn in self.buttons_mode:
             btn['state'] = NORMAL
         button['state'] = DISABLED
-        # self.canv.delete('no')
+        # self.canvas.delete('no')
 
     def clear_canv(self):
-        self.canv.delete("all")
+        self.canvas.delete("all")
         self.points.clear()
         self.lines_in_group = []
         self.lines = []
@@ -431,12 +436,12 @@ class Paint(Frame):
     def group_lines(self):
         for lineId in self.lines:
             self.lines_in_group.append(lineId)
-            self.canv.itemconfig(lineId, dash=(4, 1))
+            self.canvas.itemconfig(lineId, dash=(4, 1))
 
     def ungroup_lines(self):
         self.lines_in_group = []
         for lineId in self.lines:
-            self.canv.itemconfig(lineId, dash=())
+            self.canvas.itemconfig(lineId, dash=())
 
     def change_slider(self, *args):
         self._geometry_handler._zoom = self.zoom_slider.get()
@@ -452,9 +457,11 @@ class Paint(Frame):
 
         for line in self.lines:
             points = self.points[line]
-            x1, y1 = self._geometry_handler.transform_point(([[points[0]], [points[1]], [points[2]]]), rot_x, rot_y, rot_z)
-            x, y = self._geometry_handler.transform_point(([[points[3]], [points[4]], [points[5]]]), rot_x, rot_y, rot_z)
-            self.canv.coords(line, x1, y1, x, y)
+            x1, y1 = self._geometry_handler.transform_point(([[points[0]], [points[1]], [points[2]]]), rot_x, rot_y,
+                                                            rot_z)
+            x, y = self._geometry_handler.transform_point(([[points[3]], [points[4]], [points[5]]]), rot_x, rot_y,
+                                                          rot_z)
+            self.canvas.coords(line, x1, y1, x, y)
 
         pass
 
@@ -484,23 +491,23 @@ class Paint(Frame):
 
         # Создаем холст с белым фоном
         AREA = 10000
-        self.canv = Canvas(self, bg="white", cursor="pencil", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT,
-                           scrollregion=(-AREA, -AREA, AREA, AREA))
+        self.canvas = Canvas(self, bg="grey", cursor="pencil", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT,
+                             scrollregion=(-AREA, -AREA, AREA, AREA))
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         # # scrollbars for canvas
-        self.x_bar = Scrollbar(self.canv, orient=HORIZONTAL, cursor="fleur")
+        self.x_bar = Scrollbar(self.canvas, orient=HORIZONTAL, cursor="fleur")
         # self.x_bar.pack(side=BOTTOM, fill=X)
-        # self.x_bar.config(command=self.canv.xview)
+        # self.x_bar.config(command=self.canvas.xview)
 
-        # self.y_bar = Scrollbar(self.canv, orient=VERTICAL, cursor="fleur")
+        # self.y_bar = Scrollbar(self.canvas, orient=VERTICAL, cursor="fleur")
         # self.y_bar.pack(side=RIGHT, fill=Y)
-        # self.y_bar.config(command=self.canv.yview)
+        # self.y_bar.config(command=self.canvas.yview)
 
-        self.canv.bind("<ButtonPress-1>", self.draw_line_start)
-        self.canv.bind("<B1-Motion>", self.draw_line_action)
-        self.canv.bind("<ButtonRelease-1>", self.draw_line_end)
-        self.canv.bind("<Motion>", self.mouse_motion)
+        self.canvas.bind("<ButtonPress-1>", self.draw_line_start)
+        self.canvas.bind("<B1-Motion>", self.draw_line_action)
+        self.canvas.bind("<ButtonRelease-1>", self.draw_line_end)
+        self.canvas.bind("<Motion>", self.mouse_motion)
         # self.x_bar.bind("<B1-Motion>", self._update_zero_x_coord)
         # self.y_bar.bind("<B1-Motion>", self._update_zero_y_coord)
 
@@ -535,7 +542,6 @@ class Paint(Frame):
         self.brush_size.place(anchor="ne")
         self.brush_size.grid(row=1, column=1, columnspan=6, padx=5, pady=5, sticky=NSEW)
 
-
         mode_lab = Label(self, text="Режим: ")
         mode_lab.grid(row=2, column=0, padx=0)
         mode_draw = Button(self, text="Рисование", width=10, command=lambda: self.set_mode(MODE_MAKE_LINES, mode_draw))
@@ -543,7 +549,8 @@ class Paint(Frame):
         mode_draw['state'] = DISABLED
         self.buttons_mode.append(mode_draw)
 
-        mode_move = Button(self, text="Перемещение", width=10, command=lambda: self.set_mode(MODE_MOVE_LINES, mode_move))
+        mode_move = Button(self, text="Перемещение", width=10,
+                           command=lambda: self.set_mode(MODE_MOVE_LINES, mode_move))
         mode_move.grid(row=2, column=2)
         self.buttons_mode.append(mode_move)
 
@@ -558,40 +565,33 @@ class Paint(Frame):
         # mode_select_all = Button(self, text="Group", width=10, command=self.group_lines)
         # mode_select_all.grid(row=2, column=5)
 
-        mode_select_all = Button(self, text="Group", width=10, command=lambda: self.set_mode(MODE_SELECTION_TOOL, mode_select_all))
+        mode_select_all = Button(self, text="Group", width=10,
+                                 command=lambda: self.set_mode(MODE_SELECTION_TOOL, mode_select_all))
         mode_select_all.grid(row=2, column=5)
         self.buttons_mode.append(mode_select_all)
 
         mode_ungroup = Button(self, text="Ungroup", width=10, command=self.ungroup_lines)
         mode_ungroup.grid(row=2, column=6, sticky=W)
 
-        slider_x = Label(self, text="X Rotation:", width=10)
-        slider_x.grid(row=3, column=0)
-        self.x_rotation_slider = Scale(self, from_=-math.pi, to=math.pi, orient=tkinter.HORIZONTAL, resolution=0.01, showvalue=False, command=self.change_slider)
-        self.x_rotation_slider.set(0)
-        self.x_rotation_slider.place(anchor="ne")
-        self.x_rotation_slider.grid(row=3, column=1)
+        self.xy_button = Button(self, text="XY", font=BUTTON_FONT,
+                                command=self._set_xy_projection, relief=SUNKEN)
+        self.xy_button.grid(row=3, column=0)
 
-        slider_y = Label(self, text="Y Rotation:", width=10)
-        slider_y.grid(row=3, column=2)
-        self.y_rotation_slider = Scale(self, from_=-math.pi, to=math.pi, orient=tkinter.HORIZONTAL, resolution=0.01, showvalue=False, command=self.change_slider)
-        self.y_rotation_slider.set(0)
-        self.y_rotation_slider.place(anchor="ne")
-        self.y_rotation_slider.grid(row=3, column=3)
+        self.zy_button = Button(self, text="ZY", font=BUTTON_FONT,
+                                command=self._set_zy_projection)
+        self.zy_button.grid(row=3, column=1)
 
-        slider_z = Label(self, text="Z Rotation:", width=10)
-        slider_z.grid(row=3, column=4)
-        self.z_rotation_slider = Scale(self, from_=-math.pi, to=math.pi, orient=tkinter.HORIZONTAL, resolution=0.01, showvalue=False, command=self.change_slider)
-        self.z_rotation_slider.set(0)
-        self.z_rotation_slider.place(anchor="ne")
-        self.z_rotation_slider.grid(row=3, column=5)
+        self.xz_button = Button(self, text="XZ", font=BUTTON_FONT,
+                                command=self._set_xz_projection)
+        self.xz_button.grid(row=3, column=2)
 
         reset_rotation_btn = Button(self, text="Reset rotation", width=10, command=self.reset_rotation)
         reset_rotation_btn.grid(row=3, column=6, sticky=W)
 
         slider_zoom = Label(self, text="Zoom:", width=10)
         slider_zoom.grid(row=4, column=0)
-        self.zoom_slider = Scale(self, from_=1, to=20, orient=tkinter.HORIZONTAL, resolution=0.001, showvalue=False, command=self.change_slider)
+        self.zoom_slider = Scale(self, from_=1, to=20, orient=tkinter.HORIZONTAL, resolution=0.001, showvalue=False,
+                                 command=self.change_slider)
         self.zoom_slider.set(0)
         self.zoom_slider.place(anchor="ne")
         self.zoom_slider.grid(row=4, column=1)
@@ -610,7 +610,7 @@ class Paint(Frame):
         one_btn = Button(self, text="Загрузить проект", width=10, command=self.load_project)
         one_btn.grid(row=6, column=2)
 
-        self.canv.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        self.canvas.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
 
         self.cursor_text = Label(self, text="loading..")
         self.cursor_text.grid(row=8, column=0, sticky=W)
@@ -634,8 +634,7 @@ class Paint(Frame):
                 canvas_x2,
                 canvas_y2,
                 width=line.width,
-                fill="red" if (self.current_line == line or line in self.current_lines)
-                              and self.work_mode != WorkingMode.add_mode else line.color,
+                fill=line.color,
                 smooth=True
             )
             # drawing line text
@@ -656,3 +655,80 @@ class Paint(Frame):
     # transit zero coord by y_scrollbar
     def _update_zero_y_coord(self, event):
         self.current_zero_coord[1] = int(self.y_bar.get()[0] * 2 * MAXY + MINY)
+
+    def _get_canvas_coord_from_projection_point(self, point):
+        if isinstance(point, Point):
+            if self.projection_mode == ProjectionMode.xy:
+                return [point.x, point.y]
+            elif self.projection_mode == ProjectionMode.xz:
+                return [point.x, point.z]
+            else:
+                return [point.z, point.y]
+
+    def _get_line_text_anchor(self, point_coord):
+        part1 = ""
+        part2 = ""
+        delta = 300
+        if point_coord[1] <= delta + MINY:
+            part1 = "n"
+        elif point_coord[1] >= MAXY - delta:
+            part1 = "s"
+        if point_coord[0] <= delta - MAXX:
+            part2 = "w"
+        elif point_coord[0] >= MAXX - delta:
+            part2 = "e"
+        else:
+            part2 = "w"
+        return part1 + part2
+
+    # sub methods for draw line
+    def _get_line_text_options(self, point, anchor):
+        if isinstance(point, Point):
+            return {
+                "font": CANVAS_TEXT_FONT,
+                "text": "({}, {}, {})".format(point.x, point.y, point.z),
+                "anchor": anchor
+            }
+
+    # set projection mode methods
+    def _set_xy_projection(self):
+        self.projection_mode = ProjectionMode.xy
+        self.xy_button.config(relief=SUNKEN)
+        self.zy_button.config(relief=RAISED)
+        self.xz_button.config(relief=RAISED)
+        self.redraw_scene()
+
+    def _set_zy_projection(self):
+        self.projection_mode = ProjectionMode.zy
+        self.xy_button.config(relief=RAISED)
+        self.zy_button.config(relief=SUNKEN)
+        self.xz_button.config(relief=RAISED)
+        self.redraw_scene()
+
+    def _set_xz_projection(self):
+        self.projection_mode = ProjectionMode.xz
+        self.xy_button.config(relief=RAISED)
+        self.zy_button.config(relief=RAISED)
+        self.xz_button.config(relief=SUNKEN)
+        self.redraw_scene()
+
+    # check mouse pos
+    def _check_mouse_coord(self, x, y):
+        if x < -MAXX:
+            x = -MAXX
+        elif x > MAXX:
+            x = MAXX
+        if y < -MAXY:
+            y = -MAXY
+        elif y > MAXY:
+            y = MAXY
+        return [x, y]
+
+    # convert canvas mouse coord to point coord with projection
+    def _get_mouse_projection_point(self):
+        if self.projection_mode == ProjectionMode.xy:
+            return Point(self.current_mouse[0], self.current_mouse[1], 0)
+        elif self.projection_mode == ProjectionMode.xz:
+            return Point(self.current_mouse[0], 0, self.current_mouse[1])
+        else:
+            return Point(0, self.current_mouse[1], self.current_mouse[0])
