@@ -54,9 +54,6 @@ class Paint(Frame):
         self.current_zero_coord = [0, 0]
 
         self._geometry_handler = None
-        self.x_rotation_slider = None
-        self.y_rotation_slider = None
-        self.z_rotation_slider = None
         self.zoom_slider = None
 
         self.xy_button = None
@@ -150,33 +147,6 @@ class Paint(Frame):
                 self.lines_in_group.append(lineId)
                 self.canvas.itemconfig(lineId, dash=(4, 1))
 
-    def update_item_points(self, line):
-        z1, z2 = 0.0, 0.0
-        if line in self.points:
-            z1, z2 = self.points[line][2], self.points[line][5]
-
-        coords = self.canvas.coords(line)
-
-        self._geometry_handler._angle_x = self.x_rotation_slider.get()
-        self._geometry_handler._angle_y = self.y_rotation_slider.get()
-        self._geometry_handler._angle_z = self.z_rotation_slider.get()
-        rot_x, rot_y, rot_z = self._geometry_handler.calculate_rot_matrix(
-            self._geometry_handler._angle_x,
-            self._geometry_handler._angle_y,
-            self._geometry_handler._angle_z,
-        )
-        x1, y1, z1 = self._geometry_handler.inverse_transform_point(coords[0], coords[1], rot_x, rot_y, rot_z)
-        x2, y2, z2 = self._geometry_handler.inverse_transform_point(coords[2], coords[3], rot_x, rot_y, rot_z)
-
-        self.points[line] = [
-            x1,
-            y1,
-            z1,
-            x2,
-            y2,
-            z2
-        ]
-
     def click_on_line(self, event):
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_NONE and not self.lines_in_group:
@@ -222,9 +192,9 @@ class Paint(Frame):
                 self.current_action = EVENT_SELECT_LINES
 
     def draw_line_action(self, event):
-        self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
         self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
                                                      self.current_zero_coord[1] + event.y)
+        self._fill_status_bar(self.current_mouse[0], self.current_mouse[1])
         self.redraw_scene()
 
         if self.current_mode == MODE_MAKE_LINES:
@@ -315,8 +285,6 @@ class Paint(Frame):
                                        self.line_coords[2] + move[0],
                                        self.line_coords[3] + move[1]
                                        )
-
-                    # self.update_item_points(self.current_line)
                 else:
                     for lineId in self.lines_in_group:
                         line_coords = self.points[lineId]
@@ -327,8 +295,6 @@ class Paint(Frame):
                                            line_coords[4] + move[1]
                                            )
 
-                        # self.update_item_points(lineId)
-
         if self.current_mode == MODE_SELECTION_TOOL:
             if self.current_action == EVENT_SELECT_LINES:
                 self.current_action = EVENT_NONE
@@ -337,11 +303,11 @@ class Paint(Frame):
                 self.selector_box = None
 
     def mouse_motion(self, event):
-        self.cursor_text.config(text="({x}, {y})".format(x=event.x, y=event.y))
-        # if self.current_mode == MODE_SELECTION_TOOL:
-        #     self.canvas.delete('no')
-        #     self.canvas.create_line(event.x, 0, event.x, 1000, dash=(3, 2), tags='no')
-        #     self.canvas.create_line(0, event.y, 1000, event.y, dash=(3, 2), tags='no')
+        self._fill_status_bar(self.current_zero_coord[0] + event.x, self.current_zero_coord[1] + event.y)
+        self.redraw_scene()
+
+    def _fill_status_bar(self, x, y):
+        self.cursor_text.config(text="x:{x}, y:{y}".format(x=x, y=y))
 
     def save_project(self):
         file_path = tkinter.filedialog.asksaveasfilename(
@@ -473,93 +439,76 @@ class Paint(Frame):
         if mode == 3:
             pass
 
-    def reset_rotation(self):
-        self.x_rotation_slider.set(0)
-        self.y_rotation_slider.set(0)
-        self.z_rotation_slider.set(0)
-        self.zoom_slider.set(1)
-        self.change_slider()
-
     def setUI(self):
         # self.parent.minsize((1165, 630))
 
         self.parent.title("PyPaint")
         self.pack(fill=BOTH, expand=1)
 
-        self.columnconfigure(6, weight=1)
-        self.rowconfigure(9, weight=1)
+        # self.columnconfigure(6, weight=1)
+        self.rowconfigure(18, weight=1)
+        for i in range(7, 7+9):
+            self.rowconfigure(i, minsize=50)
 
         # Создаем холст с белым фоном
-        AREA = 10000
-        self.canvas = Canvas(self, bg="grey", cursor="pencil", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT,
-                             scrollregion=(-AREA, -AREA, AREA, AREA))
+        self.canvas = Canvas(self, bg="grey", cursor="pencil", scrollregion=(MINX, MINY, MAXX, MAXY))
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         # # scrollbars for canvas
         self.x_bar = Scrollbar(self.canvas, orient=HORIZONTAL, cursor="fleur")
-        # self.x_bar.pack(side=BOTTOM, fill=X)
-        # self.x_bar.config(command=self.canvas.xview)
+        self.x_bar.pack(side=BOTTOM, fill=X)
+        self.x_bar.config(command=self.canvas.xview)
 
-        # self.y_bar = Scrollbar(self.canvas, orient=VERTICAL, cursor="fleur")
-        # self.y_bar.pack(side=RIGHT, fill=Y)
-        # self.y_bar.config(command=self.canvas.yview)
+        self.y_bar = Scrollbar(self.canvas, orient=VERTICAL, cursor="fleur")
+        self.y_bar.pack(side=RIGHT, fill=Y)
+        self.y_bar.config(command=self.canvas.yview)
+
+        self.canvas.config(xscrollcommand=self.x_bar.set, yscrollcommand=self.y_bar.set)
+        # self.canvas.pack(side=LEFT, expand=True, fill=BOTH)
 
         self.canvas.bind("<ButtonPress-1>", self.draw_line_start)
         self.canvas.bind("<B1-Motion>", self.draw_line_action)
         self.canvas.bind("<ButtonRelease-1>", self.draw_line_end)
         self.canvas.bind("<Motion>", self.mouse_motion)
-        # self.x_bar.bind("<B1-Motion>", self._update_zero_x_coord)
-        # self.y_bar.bind("<B1-Motion>", self._update_zero_y_coord)
+        self.x_bar.bind("<B1-Motion>", self._update_zero_x_coord)
+        self.y_bar.bind("<B1-Motion>", self._update_zero_y_coord)
 
         # создаем метку для кнопок изменения цвета кисти
         color_lab = Label(self, text="Цвет: ")
-        color_lab.grid(row=0, column=0, padx=6)
 
         red_btn = Button(self, text="Красный", width=10, command=lambda: self.set_color("red", red_btn))
-        red_btn.grid(row=0, column=1)
         red_btn['state'] = DISABLED
         self.buttons_color.append(red_btn)
 
         green_btn = Button(self, text="Зеленый", width=10, command=lambda: self.set_color("green", green_btn))
-        green_btn.grid(row=0, column=2)
         self.buttons_color.append(green_btn)
 
         blue_btn = Button(self, text="Синий", width=10, command=lambda: self.set_color("blue", blue_btn))
-        blue_btn.grid(row=0, column=3)
         self.buttons_color.append(blue_btn)
 
         black_btn = Button(self, text="Черный", width=10, command=lambda: self.set_color("black", black_btn))
-        black_btn.grid(row=0, column=4)
         self.buttons_color.append(black_btn)
 
         my_color_btn = Button(self, text="Свой цвет", width=10, command=self.set_color_picker)
-        my_color_btn.grid(row=0, column=5)
 
         size_lab = Label(self, text="Размер линии: ")
-        size_lab.grid(row=1, column=0, padx=5)
         self.brush_size = Scale(self, from_=1, to=10, orient=tkinter.HORIZONTAL, resolution=1)
         self.brush_size.set(2)
         self.brush_size.place(anchor="ne")
-        self.brush_size.grid(row=1, column=1, columnspan=6, padx=5, pady=5, sticky=NSEW)
 
         mode_lab = Label(self, text="Режим: ")
-        mode_lab.grid(row=2, column=0, padx=0)
         mode_draw = Button(self, text="Рисование", width=10, command=lambda: self.set_mode(MODE_MAKE_LINES, mode_draw))
-        mode_draw.grid(row=2, column=1)
         mode_draw['state'] = DISABLED
         self.buttons_mode.append(mode_draw)
 
         mode_move = Button(self, text="Перемещение", width=10,
                            command=lambda: self.set_mode(MODE_MOVE_LINES, mode_move))
-        mode_move.grid(row=2, column=2)
         self.buttons_mode.append(mode_move)
 
         mode_del = Button(self, text="Удаление", width=10, command=lambda: self.set_mode(MODE_DELETE_LINES, mode_del))
-        mode_del.grid(row=2, column=3)
         self.buttons_mode.append(mode_del)
 
         mode_input_z = Button(self, text="Ввод Z", width=10, command=lambda: self.set_mode(MODE_INPUT_3D, mode_input_z))
-        mode_input_z.grid(row=2, column=4)
         self.buttons_mode.append(mode_input_z)
 
         # mode_select_all = Button(self, text="Group", width=10, command=self.group_lines)
@@ -567,53 +516,60 @@ class Paint(Frame):
 
         mode_select_all = Button(self, text="Group", width=10,
                                  command=lambda: self.set_mode(MODE_SELECTION_TOOL, mode_select_all))
-        mode_select_all.grid(row=2, column=5)
         self.buttons_mode.append(mode_select_all)
 
         mode_ungroup = Button(self, text="Ungroup", width=10, command=self.ungroup_lines)
-        mode_ungroup.grid(row=2, column=6, sticky=W)
 
+        mode_lab = Label(self, text="Отображение: ")
         self.xy_button = Button(self, text="XY", font=BUTTON_FONT,
                                 command=self._set_xy_projection, relief=SUNKEN)
-        self.xy_button.grid(row=3, column=0)
 
         self.zy_button = Button(self, text="ZY", font=BUTTON_FONT,
                                 command=self._set_zy_projection)
-        self.zy_button.grid(row=3, column=1)
-
         self.xz_button = Button(self, text="XZ", font=BUTTON_FONT,
                                 command=self._set_xz_projection)
-        self.xz_button.grid(row=3, column=2)
-
-        reset_rotation_btn = Button(self, text="Reset rotation", width=10, command=self.reset_rotation)
-        reset_rotation_btn.grid(row=3, column=6, sticky=W)
 
         slider_zoom = Label(self, text="Zoom:", width=10)
-        slider_zoom.grid(row=4, column=0)
-        self.zoom_slider = Scale(self, from_=1, to=20, orient=tkinter.HORIZONTAL, resolution=0.001, showvalue=False,
-                                 command=self.change_slider)
-        self.zoom_slider.set(0)
-        self.zoom_slider.place(anchor="ne")
-        self.zoom_slider.grid(row=4, column=1)
 
-        preset = Label(self, text="Действия: ")
-        preset.grid(row=5, column=0, padx=0)
+        actions = Label(self, text="Действия: ")
         clear_btn = Button(self, text="Очистить", width=10, command=self.clear_canv)
-        clear_btn.grid(row=5, column=1, sticky=W)
         trimetric_matrix_button = Button(self, text="Осмотр", width=10, command=self.open_trimetric_form)
-        trimetric_matrix_button.grid(row=5, column=2, sticky=W)
 
-        preset = Label(self, text="Файл: ")
-        preset.grid(row=6, column=0, padx=0)
-        one_btn = Button(self, text="Сохранить проект", width=10, command=self.save_project)
-        one_btn.grid(row=6, column=1)
-        one_btn = Button(self, text="Загрузить проект", width=10, command=self.load_project)
-        one_btn.grid(row=6, column=2)
-
-        self.canvas.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        label_file = Label(self, text="Файл: ")
+        save_project = Button(self, text="Сохранить проект", width=10, command=self.save_project)
+        load_project = Button(self, text="Загрузить проект", width=10, command=self.load_project)
 
         self.cursor_text = Label(self, text="loading..")
-        self.cursor_text.grid(row=8, column=0, sticky=W)
+
+        # GRID
+        color_lab.grid(row=0, column=0, padx=6)
+        red_btn.grid(row=0, column=1, sticky=NSEW)
+        green_btn.grid(row=0, column=2, sticky=NSEW)
+        blue_btn.grid(row=0, column=3, sticky=NSEW)
+        black_btn.grid(row=0, column=4, sticky=NSEW)
+        my_color_btn.grid(row=0, column=5, sticky=NSEW)
+        size_lab.grid(row=1, column=0, padx=5, sticky=NSEW)
+        mode_lab.grid(row=2, column=0, padx=0, sticky=NSEW)
+        mode_draw.grid(row=2, column=1, sticky=NSEW)
+        mode_move.grid(row=2, column=2, sticky=NSEW)
+        mode_del.grid(row=2, column=3, sticky=NSEW)
+        mode_input_z.grid(row=2, column=4, sticky=NSEW)
+        self.brush_size.grid(row=1, column=1, columnspan=6, padx=5, pady=5, sticky=NSEW)
+        mode_select_all.grid(row=2, column=5, sticky=NSEW)
+        mode_ungroup.grid(row=2, column=6, sticky=NSEW)
+        mode_lab.grid(row=3, column=0, padx=0, sticky=NSEW)
+        self.xy_button.grid(row=3, column=1, columnspan=2, sticky=NSEW)
+        self.zy_button.grid(row=3, column=3, columnspan=2, sticky=NSEW)
+        self.xz_button.grid(row=3, column=5, columnspan=2, sticky=NSEW)
+        slider_zoom.grid(row=4, column=0, sticky=NSEW)
+        actions.grid(row=5, column=0, padx=0, sticky=NSEW)
+        clear_btn.grid(row=5, column=1, sticky=NSEW)
+        trimetric_matrix_button.grid(row=5, column=2, sticky=NSEW)
+        label_file.grid(row=6, column=0, padx=0, sticky=NSEW)
+        save_project.grid(row=6, column=1, sticky=NSEW)
+        load_project.grid(row=6, column=2, sticky=NSEW)
+        self.canvas.grid(row=7, column=0, columnspan=7, rowspan=9, padx=5, pady=5, sticky=NSEW)
+        self.cursor_text.grid(row=17, column=0, sticky=NSEW)
 
     # render methods
     # redraw scene
