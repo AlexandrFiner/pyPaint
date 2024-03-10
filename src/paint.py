@@ -6,6 +6,7 @@ from tkinter import *
 from tkinter import colorchooser
 from utils import *
 from src.geometry import Geometry
+from src.Primitives import *
 import math
 from json import JSONEncoder, JSONDecoder
 from src.TrimetricForm import TrimetricForm
@@ -260,8 +261,18 @@ class Paint(Frame):
                 if abs(x-x1) < 2 and abs(y-y1) < 2:
                     self.canv.delete(self.current_line)
                 else:
+                    line = Line(
+                        Point(
+                            x1, y1, 0
+                        ),
+                        Point(
+                            x, y, 0
+                        ),
+                        self.color,
+                        self.brush_size.get()
+                    )
                     self.update_item_points(self.current_line)
-                    self.lines.append(self.current_line)
+                    self.lines.append(line)
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
@@ -600,7 +611,6 @@ class Paint(Frame):
         one_btn.grid(row=6, column=2)
 
         self.canv.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
-
 
         self.cursor_text = Label(self, text="loading..")
         self.cursor_text.grid(row=8, column=0, sticky=W)

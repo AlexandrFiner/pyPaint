@@ -4,9 +4,8 @@
 # WINDOW_H = 1000
 # WINDOW_W = 1900
 # BUTTON_FONT = "Arial 15"
-# LABEL_FONT = "Arial 12"
+LABEL_FONT = "Arial 12"
 # CANVAS_TEXT_FONT = "Arial 10"
-# CANVAS_BG_COLOR = "#a6a6a6"
 # CANVAS_ADD_CURSOR = "pencil"
 # CANVAS_EDIT_CURSOR = "fleur"
 # CANVAS_SCROLL_CURSOR = "fleur"
@@ -18,11 +17,11 @@
 # WINDOW.resizable(False, False)
 #
 # # canvas initialization
-# LEN = 10000
-# MAXY = LEN
-# MAXX = LEN
-# MINX = -LEN
-# MINY = -LEN
+LEN = 10000
+MAXY = LEN
+MAXX = LEN
+MINX = -LEN
+MINY = -LEN
 # CANVAS = Canvas(WINDOW, bg=CANVAS_BG_COLOR, cursor=CANVAS_ADD_CURSOR, scrollregion=(MINX, MINY, MAXX, MAXY))
 #
 # # scrollbars for canvas
