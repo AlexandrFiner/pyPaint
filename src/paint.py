@@ -36,7 +36,7 @@ class Paint(Frame):
         self.canvas = None
         self.parent = parent
         self.brush_size = None
-        self.color = "red"
+        self.color = "black"
         self.cursor_start = (0, 0)
         self.current_line = None
         self.points = dict()
@@ -63,6 +63,18 @@ class Paint(Frame):
         self.line_points = [None, None]
 
         self.current_mouse = None
+
+        # objects
+        self.current_zero_coord = [0, 0]
+        self.transit_line_deltas = None
+        self.current_mouse = None
+        self.prev_mouse = None
+        self.rect_start_pos = None
+        self.line_points = [None, None]
+        self.lines = []
+        self.current_line = None
+        self.current_lines = []
+        self.transit = TransitMode.nothing
 
         self.setUI()
 
@@ -139,168 +151,195 @@ class Paint(Frame):
 
         return items
 
-    def select_action(self, start, end):
-        items = self.hit_test(start, end)
-        self.ungroup_lines()
-        for lineId in self.selector_items:
-            if lineId in items:
-                self.lines_in_group.append(lineId)
-                self.canvas.itemconfig(lineId, dash=(4, 1))
+        # self._fill_status_bar(self.current_mouse[0], self.current_mouse[1])
+        # items = self.hit_test(start, end)
+        # self.ungroup_lines()
+        # for lineId in self.selector_items:
+        #     if lineId in items:
+        #         self.lines_in_group.append(lineId)
+        #         print(lineId)
+        #         # self.canvas.itemconfig(lineId, dash=(4, 1))
 
-    def click_on_line(self, event):
-        if self.current_mode == MODE_MOVE_LINES:
-            if self.current_action == EVENT_NONE and not self.lines_in_group:
-                x, y = event.x, event.y
-                self.cursor_start = (x, y)
-                self.current_line = event.widget.find_withtag('current')[0]
-                self.line_coords = self.canvas.coords(self.current_line)
-                self.current_action = EVENT_MOVE_LINE
+    # draw rect
+    def _draw_rect(self):
+        if self.current_mouse is not None and self.rect_start_pos is not None:
+            self.canvas.create_rectangle(
+                self.rect_start_pos[0],
+                self.rect_start_pos[1],
+                self.current_mouse[0],
+                self.current_mouse[1],
+                width=1,
+                dash=(5, 3),
+                outline="white"
+            )
 
-        if self.current_mode == MODE_DELETE_LINES:
-            self.current_line = event.widget.find_withtag('current')[0]
-            self.canvas.delete(self.current_line)
-            self.points.pop(self.current_line)
-            self.lines.remove(self.current_line)
-            if self.current_line in self.lines_in_group:
-                self.lines_in_group.remove(self.current_line)
-
-        if self.current_mode == MODE_INPUT_3D:
-            self.current_line = event.widget.find_withtag('current')[0]
-            z = tkinter.simpledialog.askfloat('Ввод', 'Введите Z координату')
-            self.points[self.current_line][4] = z
-            self.points[self.current_line][5] = z
+    # calculate methods
+    def _get_lines_in_rect(self):
+        for i in self.lines:
+            p1 = self._get_canvas_coord_from_projection_point(i.p1)
+            p2 = self._get_canvas_coord_from_projection_point(i.p2)
+            if p1[0] >= min(self.rect_start_pos[0], self.current_mouse[0]) \
+                    and p1[0] <= max(self.rect_start_pos[0], self.current_mouse[0]) \
+                    and p1[1] >= min(self.rect_start_pos[1], self.current_mouse[1]) \
+                    and p1[1] <= max(self.rect_start_pos[1], self.current_mouse[1]) \
+                    and p2[0] >= min(self.rect_start_pos[0], self.current_mouse[0]) \
+                    and p2[0] <= max(self.rect_start_pos[0], self.current_mouse[0]) \
+                    and p2[1] >= min(self.rect_start_pos[1], self.current_mouse[1]) \
+                    and p2[1] <= max(self.rect_start_pos[1], self.current_mouse[1]):
+                if i not in self.current_lines:
+                    self.current_lines.append(i)
+            else:
+                if i in self.current_lines:
+                    self.current_lines.remove(i)
 
     def draw_line_start(self, event):
         self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
                                                      self.current_zero_coord[1] + event.y)
         self.line_points = [None, None]
+
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_NONE:
                 self.current_action = EVENT_DRAW_LINE
                 self.line_points[0] = self._get_mouse_projection_point()
 
         if self.current_mode == MODE_MOVE_LINES:
-            if self.current_action == EVENT_NONE and self.lines_in_group:
-                x, y = event.x, event.y
-                self.cursor_start = (x, y)
+            if self.current_action == EVENT_NONE:
                 self.current_action = EVENT_MOVE_LINE
 
         if self.current_mode == MODE_SELECTION_TOOL:
             if self.current_action == EVENT_NONE:
-                x, y = event.x, event.y
-                self.cursor_start = (x, y)
+                self.prev_mouse = None
+                self.current_mouse = None
+                self.line_points = [None, None]
+                self.rect_start_pos = None
                 self.current_action = EVENT_SELECT_LINES
+
+        self.redraw_scene()
 
     def draw_line_action(self, event):
         self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
                                                      self.current_zero_coord[1] + event.y)
-        self._fill_status_bar(self.current_mouse[0], self.current_mouse[1])
         self.redraw_scene()
 
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_DRAW_LINE:
-                self.line_points[1] = self._get_mouse_projection_point()
-                buffer_line = Line(
-                    self.line_points[0],
-                    self.line_points[1],
-                    self.color,
-                    self.brush_size.get()
-                )
-                self.current_line = buffer_line
-                self._draw_line(self.current_line)
-
-                # x1, y1 = self.cursor_start
-                # x, y = event.x, event.y
-                # self.canvas.coords(self.current_line, x1, y1, x, y)
+                self._add_line()
 
         if self.current_mode == MODE_MOVE_LINES:
             if self.current_action == EVENT_MOVE_LINE:
-                x1, y1 = self.cursor_start
-                x, y = event.x, event.y
-
-                move = x - x1, y - y1
-
-                if not self.lines_in_group:
-                    self.canvas.coords(self.current_line,
-                                       self.line_coords[0] + move[0],
-                                       self.line_coords[1] + move[1],
-                                       self.line_coords[2] + move[0],
-                                       self.line_coords[3] + move[1]
-                                       )
-                else:
-                    for lineId in self.lines_in_group:
-                        line_coords = self.points[lineId]
-                        self.canvas.coords(lineId,
-                                           line_coords[0] + move[0],
-                                           line_coords[1] + move[1],
-                                           line_coords[3] + move[0],
-                                           line_coords[4] + move[1]
-                                           )
+                self._transit_line()
 
         if self.current_mode == MODE_SELECTION_TOOL:
             if self.current_action == EVENT_SELECT_LINES:
-                if self.selector_box is not None:
-                    self.canvas.delete(self.selector_box)
+                if self.rect_start_pos is None:
+                    self.current_lines = []
+                    self.rect_start_pos = self.current_mouse.copy()
 
-                self.selector_box = self.draw_rectangle(self.cursor_start, (event.x, event.y), fill="", outline="black",
-                                                        width=2, dash=(2, 6))
-                self.select_action(self.cursor_start, (event.x, event.y))
+                self._draw_rect()
+                self._get_lines_in_rect()
+
+        self.prev_mouse = self.current_mouse.copy()
+        self._fill_status_bar(self.current_mouse[0], self.current_mouse[1])
+
+    def _transit_line(self):
+        eps = 10
+        if self.prev_mouse is not None:
+            if len(self.current_lines) != 0:
+                pass
+                # Перемещение группы
+            else:
+                if self.transit == TransitMode.nothing:
+                    for i in range(len(self.lines)):
+                        if isinstance(self.lines[i], Line):
+                            # match with p1
+                            point_to_canvas = self._get_canvas_coord_from_projection_point(self.lines[i].p1)
+                            if math.fabs(point_to_canvas[0] - self.prev_mouse[0]) <= eps \
+                                    and math.fabs(point_to_canvas[1] - self.prev_mouse[1]) <= eps:
+                                self.transit = TransitMode.point1
+                                self.current_line = self.lines[i]
+                                break
+
+                            # match with p2
+                            point_to_canvas = self._get_canvas_coord_from_projection_point(self.lines[i].p2)
+                            if math.fabs(point_to_canvas[0] - self.prev_mouse[0]) <= eps \
+                                    and math.fabs(point_to_canvas[1] - self.prev_mouse[1]) <= eps:
+                                self.transit = TransitMode.point2
+                                self.current_line = self.lines[i]
+                                break
+
+                            # match with point between p1, p2
+                            if self._is_cursor_on_line(self.prev_mouse[0], self.prev_mouse[1], self.lines[i]):
+                                p1 = self._get_canvas_coord_from_projection_point(self.lines[i].p1)
+                                p2 = self._get_canvas_coord_from_projection_point(self.lines[i].p2)
+                                # deltas for canvas coord
+                                self.transit_line_deltas = [
+                                    p1[0] - self.prev_mouse[0],
+                                    p1[1] - self.prev_mouse[1],
+                                    # deltas for p2
+                                    self.prev_mouse[0] - p2[0],
+                                    self.prev_mouse[1] - p2[1]
+                                ]
+                                self.current_line = self.lines[i]
+                                self.transit = TransitMode.parallel
+                                break
+
+                # check flags
+                if self.transit == TransitMode.point1:
+                    if self.projection_mode == ProjectionMode.xy:
+                        self.current_line.p1.x = self.current_mouse[0]
+                        self.current_line.p1.y = self.current_mouse[1]
+                    elif self.projection_mode == ProjectionMode.xz:
+                        self.current_line.p1.x = self.current_mouse[0]
+                        self.current_line.p1.z = self.current_mouse[1]
+                    else:
+                        self.current_line.p1.z = self.current_mouse[0]
+                        self.current_line.p1.y = self.current_mouse[1]
+                if self.transit == TransitMode.point2:
+                    if self.projection_mode == ProjectionMode.xy:
+                        self.current_line.p2.x = self.current_mouse[0]
+                        self.current_line.p2.y = self.current_mouse[1]
+                    elif self.projection_mode == ProjectionMode.xz:
+                        self.current_line.p2.x = self.current_mouse[0]
+                        self.current_line.p2.z = self.current_mouse[1]
+                    else:
+                        self.current_line.p2.z = self.current_mouse[0]
+                        self.current_line.p2.y = self.current_mouse[1]
+                if self.transit == TransitMode.parallel:
+                    # check on bounds p1, p2
+                    p1 = self._get_canvas_coord_from_projection_point(self.current_line.p1)
+                    p2 = self._get_canvas_coord_from_projection_point(self.current_line.p2)
+                    is_not_bound = self._check_point_coord(p1[0], p1[1]) and self._check_point_coord(p2[0], p2[1])
+                    if is_not_bound:
+                        if self.projection_mode == ProjectionMode.xy:
+                            self.current_line.p1.x = self.current_mouse[0] + self.transit_line_deltas[0]
+                            self.current_line.p2.x = self.current_mouse[0] - self.transit_line_deltas[2]
+                            self.current_line.p1.y = self.current_mouse[1] + self.transit_line_deltas[1]
+                            self.current_line.p2.y = self.current_mouse[1] - self.transit_line_deltas[3]
+                        if self.projection_mode == ProjectionMode.xz:
+                            self.current_line.p1.x = self.current_mouse[0] + self.transit_line_deltas[0]
+                            self.current_line.p2.x = self.current_mouse[0] - self.transit_line_deltas[2]
+                            self.current_line.p1.z = self.current_mouse[1] + self.transit_line_deltas[1]
+                            self.current_line.p2.z = self.current_mouse[1] - self.transit_line_deltas[3]
+                        if self.projection_mode == ProjectionMode.zy:
+                            self.current_line.p1.z = self.current_mouse[0] + self.transit_line_deltas[0]
+                            self.current_line.p2.z = self.current_mouse[0] - self.transit_line_deltas[2]
+                            self.current_line.p1.y = self.current_mouse[1] + self.transit_line_deltas[1]
+                            self.current_line.p2.y = self.current_mouse[1] - self.transit_line_deltas[3]
 
     def draw_line_end(self, event):
+        self.prev_mouse = None
+        self.current_mouse = None
+        self.line_points = [None, None]
+        self.transit_line_deltas = None
+        self.transit = TransitMode.nothing
+
         if self.current_mode == MODE_MAKE_LINES:
             if self.current_action == EVENT_DRAW_LINE:
                 self.current_action = EVENT_NONE
                 self.lines.append(self.current_line)
-                # x1, y1 = self.cursor_start
-                # x, y = event.x, event.y
-                # self.canvas.coords(self.current_line, x1, y1, x, y)
-                # if abs(x-x1) < 2 and abs(y-y1) < 2:
-                #     self.canvas.delete(self.current_line)
-                # else:
-                #     line = Line(
-                #         Point(
-                #             x1, y1, 0
-                #         ),
-                #         Point(
-                #             x, y, 0
-                #         ),
-                #         self.color,
-                #         self.brush_size.get()
-                #     )
-                #     self.lines.append(line)
-                #     self.redraw_scene()
+                self.current_line = None
 
-        if self.current_mode == MODE_MOVE_LINES:
-            if self.current_action == EVENT_MOVE_LINE:
-                self.current_action = EVENT_NONE
-
-                x1, y1 = self.cursor_start
-                x, y = event.x, event.y
-
-                move = x - x1, y - y1
-                if not self.lines_in_group:
-                    self.canvas.coords(self.current_line,
-                                       self.line_coords[0] + move[0],
-                                       self.line_coords[1] + move[1],
-                                       self.line_coords[2] + move[0],
-                                       self.line_coords[3] + move[1]
-                                       )
-                else:
-                    for lineId in self.lines_in_group:
-                        line_coords = self.points[lineId]
-                        self.canvas.coords(lineId,
-                                           line_coords[0] + move[0],
-                                           line_coords[1] + move[1],
-                                           line_coords[3] + move[0],
-                                           line_coords[4] + move[1]
-                                           )
-
-        if self.current_mode == MODE_SELECTION_TOOL:
-            if self.current_action == EVENT_SELECT_LINES:
-                self.current_action = EVENT_NONE
-                if self.selector_box is not None:
-                    self.canvas.delete(self.selector_box)
-                self.selector_box = None
+        self.current_action = EVENT_NONE
 
     def mouse_motion(self, event):
         self._fill_status_bar(self.current_zero_coord[0] + event.x, self.current_zero_coord[1] + event.y)
@@ -355,6 +394,8 @@ class Paint(Frame):
                 self.points.clear()
                 self.lines_in_group = []
                 self.lines = []
+                self.current_line = None
+                self.current_lines = []
 
                 with open(file_path, "r", encoding="utf-8") as file:
                     self.lines = json.load(file, object_hook=self.decode_object)
@@ -384,6 +425,7 @@ class Paint(Frame):
         for btn in self.buttons_mode:
             btn['state'] = NORMAL
         button['state'] = DISABLED
+        self.redraw_scene()
         # self.canvas.delete('no')
 
     def clear_canv(self):
@@ -405,9 +447,12 @@ class Paint(Frame):
             self.canvas.itemconfig(lineId, dash=(4, 1))
 
     def ungroup_lines(self):
-        self.lines_in_group = []
-        for lineId in self.lines:
-            self.canvas.itemconfig(lineId, dash=())
+        self.current_lines = []
+        self.current_line = None
+        self.redraw_scene()
+        # self.lines_in_group = []
+        # for lineId in self.lines:
+        #     self.canvas.itemconfig(lineId, dash=())
 
     def change_slider(self, *args):
         self._geometry_handler._zoom = self.zoom_slider.get()
@@ -477,7 +522,6 @@ class Paint(Frame):
         color_lab = Label(self, text="Цвет: ")
 
         red_btn = Button(self, text="Красный", width=10, command=lambda: self.set_color("red", red_btn))
-        red_btn['state'] = DISABLED
         self.buttons_color.append(red_btn)
 
         green_btn = Button(self, text="Зеленый", width=10, command=lambda: self.set_color("green", green_btn))
@@ -487,6 +531,7 @@ class Paint(Frame):
         self.buttons_color.append(blue_btn)
 
         black_btn = Button(self, text="Черный", width=10, command=lambda: self.set_color("black", black_btn))
+        black_btn['state'] = DISABLED
         self.buttons_color.append(black_btn)
 
         my_color_btn = Button(self, text="Свой цвет", width=10, command=self.set_color_picker)
@@ -501,11 +546,11 @@ class Paint(Frame):
         mode_draw['state'] = DISABLED
         self.buttons_mode.append(mode_draw)
 
-        mode_move = Button(self, text="Перемещение", width=10,
+        mode_move = Button(self, text="Редактирование", width=10,
                            command=lambda: self.set_mode(MODE_MOVE_LINES, mode_move))
         self.buttons_mode.append(mode_move)
 
-        mode_del = Button(self, text="Удаление", width=10, command=lambda: self.set_mode(MODE_DELETE_LINES, mode_del))
+        mode_del = Button(self, text="Удаление", width=10, command=lambda: self._backspace_clicked())
         self.buttons_mode.append(mode_del)
 
         mode_input_z = Button(self, text="Ввод Z", width=10, command=lambda: self.set_mode(MODE_INPUT_3D, mode_input_z))
@@ -591,6 +636,8 @@ class Paint(Frame):
                 canvas_y2,
                 width=line.width,
                 fill=line.color,
+                dash=(3, 3) if (self.current_line == line or line in self.current_lines) and
+                               self.current_mode != MODE_MAKE_LINES else None,
                 smooth=True
             )
             # drawing line text
@@ -688,3 +735,54 @@ class Paint(Frame):
             return Point(self.current_mouse[0], 0, self.current_mouse[1])
         else:
             return Point(0, self.current_mouse[1], self.current_mouse[0])
+
+    # check cursor pos on line
+    def _is_cursor_on_line(self, m_x, m_y, line):
+        # point projection to canvas coords
+        p1 = self._get_canvas_coord_from_projection_point(line.p1)
+        p2 = self._get_canvas_coord_from_projection_point(line.p2)
+        if m_x < min(p1[0], p2[0]) or m_x > max(p1[0], p2[0]):
+            return False
+        if m_y < min(p1[1], p2[1]) or m_y > max(p1[1], p2[1]):
+            return False
+        # canonical equation of line in the plane: Ax + By + C = 0
+        eps = 10
+        a = p2[1] - p1[1]
+        b = p1[0] - p2[0]
+        c = p2[0] * p1[1] - p1[0] * p2[1]
+        return math.fabs(m_x * a + m_y * b + c) <= eps ** 3
+
+    # check line point pos
+    def _check_point_coord(self, x, y):
+        if x <= MINX or x >= MAXX or y <= MINY or y >= MAXY:
+            return False
+        return True
+
+    # add line
+    def _add_line(self):
+        if self.line_points[0] is None:
+            self.line_points[0] = self._get_mouse_projection_point()
+            return
+
+        self.line_points[1] = self._get_mouse_projection_point()
+        buffer_line = Line(
+            self.line_points[0],
+            self.line_points[1],
+            self.color,
+            self.brush_size.get()
+        )
+        self.current_line = buffer_line
+        self._draw_line(self.current_line)
+
+    # handlers
+    # delete current line or group of lines
+    def _backspace_clicked(self):
+        print(123)
+        if self.current_line is not None:
+            self.lines.remove(self.current_line)
+            self.current_line = None
+        if len(self.current_lines) != 0:
+            for i in self.current_lines:
+                self.lines.remove(i)
+            self.current_lines = []
+        self.redraw_scene()
