@@ -25,7 +25,7 @@ class Paint(Frame):
         self.cursor_text = None
         self.canv = None
         self.parent = parent
-        self.brush_size = 2
+        self.brush_size = None
         self.color = "red"
         self.cursor_start = (0, 0)
         self.current_line = None
@@ -188,7 +188,7 @@ class Paint(Frame):
                 self.current_action = EVENT_DRAW_LINE
                 x, y = event.x, event.y
                 self.cursor_start = (x, y)
-                self.current_line = self.canv.create_line(x, y, x, y, fill=self.color, width=self.brush_size)
+                self.current_line = self.canv.create_line(x, y, x, y, fill=self.color, width=self.brush_size.get())
                 self.canv.tag_bind(self.current_line, '<Button-1>', self.click_on_line)
 
         if self.current_mode == MODE_MOVE_LINES:
@@ -391,12 +391,6 @@ class Paint(Frame):
         for btn in self.buttons_color:
             btn['state'] = NORMAL
 
-    def set_brush_size(self, new_size, button):
-        self.brush_size = new_size
-        for btn in self.buttons_size:
-            btn['state'] = NORMAL
-        button['state'] = DISABLED
-
     def set_mode(self, mode, button):
         self.current_mode = mode
         for btn in self.buttons_mode:
@@ -462,11 +456,11 @@ class Paint(Frame):
         self.pack(fill=BOTH, expand=1)
 
         self.columnconfigure(6, weight=1)
-        self.rowconfigure(5, weight=1)
+        self.rowconfigure(6, weight=1)
 
         # Создаем холст с белым фоном
         self.canv = Canvas(self, bg="white", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT)
-        self.canv.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
+        self.canv.grid(row=6, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
@@ -491,7 +485,7 @@ class Paint(Frame):
         blue_btn.grid(row=0, column=3)
         self.buttons_color.append(blue_btn)
 
-        black_btn = Button(self, text="черный", width=10, command=lambda: self.set_color("black", black_btn))
+        black_btn = Button(self, text="Черный", width=10, command=lambda: self.set_color("black", black_btn))
         black_btn.grid(row=0, column=4)
         self.buttons_color.append(black_btn)
 
@@ -503,30 +497,11 @@ class Paint(Frame):
 
         size_lab = Label(self, text="Размер линии: ")
         size_lab.grid(row=1, column=0, padx=5)
-        one_btn = Button(self, text="2x", width=10, command=lambda: self.set_brush_size(2, one_btn))
-        one_btn.grid(row=1, column=1)
-        one_btn['state'] = DISABLED
-        self.buttons_size.append(one_btn)
+        self.brush_size = Scale(self, from_=1, to=10, orient=tkinter.HORIZONTAL, resolution=1)
+        self.brush_size.set(2)
+        self.brush_size.place(anchor="ne")
+        self.brush_size.grid(row=1, column=1, columnspan=6, padx=5, pady=5, sticky=NSEW)
 
-        two_btn = Button(self, text="5x", width=10, command=lambda: self.set_brush_size(5, two_btn))
-        two_btn.grid(row=1, column=2)
-        self.buttons_size.append(two_btn)
-
-        five_btn = Button(self, text="7x", width=10, command=lambda: self.set_brush_size(7, five_btn))
-        five_btn.grid(row=1, column=3)
-        self.buttons_size.append(five_btn)
-
-        seven_btn = Button(self, text="10x", width=10, command=lambda: self.set_brush_size(10, seven_btn))
-        seven_btn.grid(row=1, column=4)
-        self.buttons_size.append(seven_btn)
-
-        ten_btn = Button(self, text="20x", width=10, command=lambda: self.set_brush_size(20, ten_btn))
-        ten_btn.grid(row=1, column=5)
-        self.buttons_size.append(ten_btn)
-
-        twenty_btn = Button(self, text="50x", width=10, command=lambda: self.set_brush_size(50, twenty_btn))
-        twenty_btn.grid(row=1, column=6, sticky=W)
-        self.buttons_size.append(twenty_btn)
 
         mode_lab = Label(self, text="Режим: ")
         mode_lab.grid(row=2, column=0, padx=0)
@@ -588,22 +563,12 @@ class Paint(Frame):
         self.zoom_slider.place(anchor="ne")
         self.zoom_slider.grid(row=4, column=1)
 
-        preset = Label(self, text="Вид: ")
-        preset.grid(row=5, column=0, padx=0)
-        one_btn = Button(self, text="XY", width=10, command=lambda: self.set_view_mode(1))
-        one_btn.grid(row=5, column=1)
-        one_btn = Button(self, text="ZY", width=10, command=lambda: self.set_view_mode(2))
-        one_btn.grid(row=5, column=2)
-        one_btn = Button(self, text="XZ", width=10, command=lambda: self.set_view_mode(3))
-        one_btn.grid(row=5, column=3)
-
         preset = Label(self, text="Файл: ")
-        preset.grid(row=6, column=0, padx=0)
+        preset.grid(row=5, column=0, padx=0)
         one_btn = Button(self, text="Сохранить проект", width=10, command=self.save_project)
-        one_btn.grid(row=6, column=1)
+        one_btn.grid(row=5, column=1)
         one_btn = Button(self, text="Загрузить проект", width=10, command=self.load_project)
-        one_btn.grid(row=6, column=2)
-
+        one_btn.grid(row=5, column=2)
 
         self.cursor_text = Label(self, text="loading..")
-        self.cursor_text.grid(row=8, column=0, sticky=W)
+        self.cursor_text.grid(row=7, column=0, sticky=W)
