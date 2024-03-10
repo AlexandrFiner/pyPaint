@@ -456,11 +456,10 @@ class Paint(Frame):
         self.pack(fill=BOTH, expand=1)
 
         self.columnconfigure(6, weight=1)
-        self.rowconfigure(6, weight=1)
+        self.rowconfigure(9, weight=1)
 
         # Создаем холст с белым фоном
         self.canv = Canvas(self, bg="white", width=self.CANVAS_WIDTH, height=self.CANVAS_HEIGHT)
-        self.canv.grid(row=6, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
         self._geometry_handler = Geometry(self.CANVAS_WIDTH, self.CANVAS_HEIGHT)
 
         self.canv.bind("<ButtonPress-1>", self.draw_line_start)
@@ -491,9 +490,6 @@ class Paint(Frame):
 
         my_color_btn = Button(self, text="Свой цвет", width=10, command=self.set_color_picker)
         my_color_btn.grid(row=0, column=5)
-
-        clear_btn = Button(self, text="Очистить", width=10, command=self.clear_canv)
-        clear_btn.grid(row=0, column=6, sticky=W)
 
         size_lab = Label(self, text="Размер линии: ")
         size_lab.grid(row=1, column=0, padx=5)
@@ -563,12 +559,19 @@ class Paint(Frame):
         self.zoom_slider.place(anchor="ne")
         self.zoom_slider.grid(row=4, column=1)
 
-        preset = Label(self, text="Файл: ")
+        preset = Label(self, text="Действия: ")
         preset.grid(row=5, column=0, padx=0)
+        clear_btn = Button(self, text="Очистить", width=10, command=self.clear_canv)
+        clear_btn.grid(row=5, column=1, sticky=W)
+
+        preset = Label(self, text="Файл: ")
+        preset.grid(row=6, column=0, padx=0)
         one_btn = Button(self, text="Сохранить проект", width=10, command=self.save_project)
-        one_btn.grid(row=5, column=1)
+        one_btn.grid(row=6, column=1)
         one_btn = Button(self, text="Загрузить проект", width=10, command=self.load_project)
-        one_btn.grid(row=5, column=2)
+        one_btn.grid(row=6, column=2)
+
+        self.canv.grid(row=7, column=0, columnspan=7, padx=5, pady=5, sticky=E + W + S + N)
 
         self.cursor_text = Label(self, text="loading..")
-        self.cursor_text.grid(row=7, column=0, sticky=W)
+        self.cursor_text.grid(row=8, column=0, sticky=W)
