@@ -202,16 +202,17 @@ class Paint(Frame):
                 self.line_points[0] = self._get_mouse_projection_point()
 
         if self.current_mode == MODE_MOVE_LINES:
-            mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x, self.current_zero_coord[1] + event.y)
-            flag = False
-            for i in range(len(self.lines)):
-                if self._is_cursor_on_line(mouse[0], mouse[1], self.lines[i]):
-                    self.current_line = self.lines[i]
-                    flag = True
-                    break
-            if not flag:
-                self.current_line = None
-            self.current_lines = []
+            if len(self.current_lines) < 2:
+                mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x, self.current_zero_coord[1] + event.y)
+                flag = False
+                for i in range(len(self.lines)):
+                    if self._is_cursor_on_line(mouse[0], mouse[1], self.lines[i]):
+                        self.current_line = self.lines[i]
+                        flag = True
+                        break
+                if not flag:
+                    self.current_line = None
+                self.current_lines = []
             # self._set_color_width_from_line(self.current_line)
             # self._fill_status_bar(mouse[0], mouse[1])
             self.redraw_scene()
@@ -230,7 +231,6 @@ class Paint(Frame):
         self.redraw_scene()
 
     def draw_line_action(self, event):
-        print(event.x, self.current_zero_coord[0])
         self.current_mouse = self._check_mouse_coord(self.current_zero_coord[0] + event.x,
                                                      self.current_zero_coord[1] + event.y)
         self.redraw_scene()
@@ -258,9 +258,46 @@ class Paint(Frame):
     def _transit_line(self):
         eps = 10
         if self.prev_mouse is not None:
-            if len(self.current_lines) != 0:
-                pass
-                # Перемещение группы
+            if len(self.current_lines) > 1:
+                if self.transit == TransitMode.nothing:
+                    self.transit_line_deltas = []
+                    for i in range(len(self.current_lines)):
+                        self.current_line = self.current_lines[i]
+
+                        p1 = self._get_canvas_coord_from_projection_point(self.current_line.p1)
+                        p2 = self._get_canvas_coord_from_projection_point(self.current_line.p2)
+                        # deltas for canvas coord
+                        self.transit_line_deltas.append([
+                            p1[0] - self.prev_mouse[0],
+                            p1[1] - self.prev_mouse[1],
+                            # deltas for p2
+                            self.prev_mouse[0] - p2[0],
+                            self.prev_mouse[1] - p2[1]
+                        ])
+                    self.transit = TransitMode.parallel
+
+                if self.transit == TransitMode.parallel:
+                    for i in range(len(self.current_lines)):
+                        self.current_line = self.current_lines[i]
+                        p1 = self._get_canvas_coord_from_projection_point(self.current_line.p1)
+                        p2 = self._get_canvas_coord_from_projection_point(self.current_line.p2)
+                        is_not_bound = self._check_point_coord(p1[0], p1[1]) and self._check_point_coord(p2[0], p2[1])
+                        if is_not_bound:
+                            if self.projection_mode == ProjectionMode.xy:
+                                self.current_line.p1.x = self.current_mouse[0] + self.transit_line_deltas[i][0]
+                                self.current_line.p2.x = self.current_mouse[0] - self.transit_line_deltas[i][2]
+                                self.current_line.p1.y = self.current_mouse[1] + self.transit_line_deltas[i][1]
+                                self.current_line.p2.y = self.current_mouse[1] - self.transit_line_deltas[i][3]
+                            if self.projection_mode == ProjectionMode.xz:
+                                self.current_line.p1.x = self.current_mouse[0] + self.transit_line_deltas[i][0]
+                                self.current_line.p2.x = self.current_mouse[0] - self.transit_line_deltas[i][2]
+                                self.current_line.p1.z = self.current_mouse[1] + self.transit_line_deltas[i][1]
+                                self.current_line.p2.z = self.current_mouse[1] - self.transit_line_deltas[i][3]
+                            if self.projection_mode == ProjectionMode.zy:
+                                self.current_line.p1.z = self.current_mouse[0] + self.transit_line_deltas[i][0]
+                                self.current_line.p2.z = self.current_mouse[0] - self.transit_line_deltas[i][2]
+                                self.current_line.p1.y = self.current_mouse[1] + self.transit_line_deltas[i][1]
+                                self.current_line.p2.y = self.current_mouse[1] - self.transit_line_deltas[i][3]
             else:
                 if self.transit == TransitMode.nothing:
                     for i in range(len(self.lines)):
@@ -780,7 +817,6 @@ class Paint(Frame):
     # handlers
     # delete current line or group of lines
     def _backspace_clicked(self):
-        print(123)
         if self.current_line is not None:
             self.lines.remove(self.current_line)
             self.current_line = None
